@@ -61,10 +61,39 @@ pub fn main() !void {
 		show_token(token);
 	}
 	std.debug.print("\n", .{});
+	const program = parse_program(&mem, tokens.items, &error_log) catch {
+		for (error_log.items) |err| {
+			show_error(contents, err);
+		}
+		return;
+	};
+	for (program.items) |expr| {
+		show_expr(expr, 1);
+	}
+	std.debug.print("\n", .{});
 }
 
 pub fn show_token(token: Token) void {
 	std.debug.print("{s} ", .{token.text});
+}
+
+pub fn show_expr(expr: *Expr, depth: u64) void {
+	for (0..depth) |_| {
+		std.debug.print(" ", .{});
+	}
+	std.debug.print("( ", .{});
+	switch (expr.*){
+		.atom => {
+			show_token(expr.atom);
+		},
+		.list => {
+			for (expr.list.items) |sub| {
+				std.debug.print("\n", .{});
+				show_expr(sub, depth+1);
+			}
+		}
+	}
+	std.debug.print(")", .{});
 }
 
 pub fn show_error(text: []u8, err: Error) void {
@@ -153,6 +182,10 @@ pub fn symbol(c: u8) bool {
 pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) Buffer(Token) {
 	var i: u64 = 0;
 	var tokens = Buffer(Token).init(mem.*);
+	var keywords = Map(TOKEN).init(mem.*);
+	keywords.put("bind", .BIND) catch unreachable;
+	keywords.put("block", .BIND) catch unreachable;
+	keywords.put("comptime", .BIND) catch unreachable;
 	while (i < text.len) {
 		var c = text[i];
 		var token = Token {
@@ -191,6 +224,9 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 				c = text[i];
 			}
 			token.text = text[start .. i];
+			if (keywords.get(token.text)) |tag| {
+				token.tag = tag;
+			}
 			tokens.append(token)
 				catch unreachable;
 			continue;
@@ -293,4 +329,73 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 		return tokens;
 	}
 	return tokens;
+}
+
+const Expr = union(enum) {
+	atom: Token,
+	list: Buffer(*Expr)
+};
+
+const ParseError = error {
+	UnexpectedToken,
+	UnexpectedEOF
+};
+
+pub fn parse_program(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffer(Error)) ParseError!Buffer(*Expr) {
+	var i: u64 = 0;
+	var program = Buffer(*Expr).init(mem.*);
+	while (i < tokens.len){
+		if (tokens[i].tag == .OPEN){
+			program.append(try parse_sexpr(mem, tokens, &i, err))
+				catch unreachable;
+			continue;
+		}
+		err.append(set_error(mem, i, "Unexpected token for beginning of expression, expected (, found {s}", .{tokens[i].text}))
+			catch unreachable;
+		return ParseError.UnexpectedToken;
+	}
+	return program;
+}
+
+pub fn parse_sexpr(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err: *Buffer(Error)) ParseError!*Expr {
+	var tok = tokens[i.*];
+	std.debug.assert(tok.tag == .OPEN);
+	var expr = mem.create(Expr)
+		catch unreachable;
+	expr.* = Expr{
+		.list = Buffer(*Expr).init(mem.*)
+	};
+	i.* += 1;
+	if (i.* == tokens.len){
+		err.append(set_error(mem, i.*, "Unexpected end of file in s expression\n", .{}))
+			catch unreachable;
+		return ParseError.UnexpectedEOF;
+	}
+	tok = tokens[i.*];
+	while (tok.tag != .CLOSE){
+		if (tok.tag == .OPEN){
+			const subexpr = try parse_sexpr(mem, tokens, i, err);
+			expr.list.append(subexpr)
+				catch unreachable;
+		}
+		else {
+			const subexpr = Expr{
+				.atom = tok
+			};
+			const loc = mem.create(Expr)
+				catch unreachable;
+			loc.* = subexpr;
+			expr.list.append(loc)
+				catch unreachable;
+			i.* += 1;
+		}
+		if (i.* == tokens.len){
+			err.append(set_error(mem, i.*, "Unexpected end of file in s expression\n", .{}))
+				catch unreachable;
+			return ParseError.UnexpectedEOF;
+		}
+		tok = tokens[i.*];
+	}
+	i.* += 1;
+	return expr;
 }
