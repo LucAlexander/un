@@ -72,12 +72,13 @@ pub fn main() !void {
 	}
 	std.debug.print("\n", .{});
 	var program = Program.init(&mem);
-	_ = program.compute(raw_expressions, &error_log) catch {
+	const val = program.compute(raw_expressions, &error_log) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
 		}
 		return;
 	};
+	show_expr(val, 1);
 }
 
 pub fn show_token(token: Token) void {
@@ -409,8 +410,8 @@ pub fn parse_sexpr(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err:
 
 const Bind = struct {
 	name: Token,
-	args: Expr,
-	expr: Expr
+	args: *Expr,
+	expr: *Expr
 };
 
 const Program = struct {
@@ -425,31 +426,42 @@ const Program = struct {
 	}
 	
 	pub fn compute(self: *Program, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
-		var substrate: ?*Expr = null;
-		for (program.items) |expr| {
-			if (expr.* == .atom){
-				err.append(set_error(self.mem, expr.atom.pos, "Global atom {s}\n", .{expr.atom.text}))
-					catch unreachable;
-				return ParseError.UnexpectedToken;
-			}
-			if (expr.list.items.len != 0){
-				if (expr.list.items[0].* == .atom){
-					if (expr.list.items[0].atom.tag == .BIND){
-						const bind = try expr_to_bind(self.mem, expr, err);
-						self.binds.put(bind.name.text, bind)
-							catch unreachable;
+		var old_binds = self.binds.count();
+		while (true){
+			for (program.items) |expr| {
+				if (expr.* == .atom){
+					err.append(set_error(self.mem, expr.atom.pos, "Global atom {s}\n", .{expr.atom.text}))
+						catch unreachable;
+					return ParseError.UnexpectedToken;
+				}
+				if (expr.list.items.len != 0){
+					if (expr.list.items[0].* == .atom){
+						if (expr.list.items[0].atom.tag == .BIND){
+							const bind = try expr_to_bind(self.mem, expr, err);
+							self.binds.put(bind.name.text, bind)
+								catch unreachable;
+							continue;
+						}
+					}
+					const candidate = try self.descend(expr, err);
+					if (candidate.* == .list){
+						if (candidate.list.items.len == 4){
+							if (candidate.list.items[0].atom.tag == .BIND){
+								const bind = try expr_to_bind(self.mem, candidate, err);
+								self.binds.put(bind.name.text, bind)
+									catch unreachable;
+								continue;
+							}
+						}
+					}
+					if (self.binds.count() != old_binds){
+						old_binds = self.binds.count();
 						continue;
 					}
+					return candidate;
 				}
-				substrate = expr;
 			}
 		}
-		if (substrate) |sub| {
-			return try self.descend(sub, err);
-		}
-		err.append(set_error(self.mem, 0, "No substrate entry point found\n", .{}))
-			catch unreachable;
-		return ParseError.UnexpectedEOF;
 	}
 
 	pub fn descend(self: *Program, expr: *Expr, err: *Buffer(Error)) ParseError!*Expr {
@@ -472,16 +484,103 @@ const Program = struct {
 				for (1..expr.list.items.len) |i| {
 					expr.list.items[i] = try self.descend(expr.list.items[i], err);
 				}
+				if (expr.list.items[0].atom.tag == .COMP){
+					if (expr.list.items[1].* == .atom){
+						return expr.list.items[1];
+					}
+					return try self.compute(expr.list.items[1].list, err);
+				}
 				if (self.binds.get(expr.list.items[0].atom.text)) |bind| {
-					//TODO check for what kind
-					//TODO if comptime or constant expand
-					//TODO else retain call structure
+					switch (bind.expr.*){
+						.atom => {
+							if (bind.args.* == .atom){
+								return bind.expr;
+							}
+							if (bind.args.list.items.len == 0){
+								return bind.expr;
+							}
+							const wrapper = self.mem.create(Expr)
+								catch unreachable;
+							wrapper.* = Expr{
+								.list = Buffer(*Expr).init(self.mem.*)
+							};
+							wrapper.list.append(bind.expr)
+								catch unreachable;
+							const updated = try apply_args(self.mem, wrapper, bind, err);
+							return try self.compute(updated.list, err);
+						},
+						.list => {
+							if (bind.expr.list.items.len == 0){
+								return bind.expr;
+							}
+							else if (bind.expr.list.items[0].* == .atom){
+								if (bind.expr.list.items[0].atom.tag == .COMP){
+									if (bind.args.* == .atom){
+										if (bind.expr.list.items[1].* == .atom){
+											return expr.list.items[1];
+										}
+										return try self.compute(bind.expr.list.items[1].list, err);
+									}
+									if (bind.args.list.items.len == 0){
+										if (bind.expr.list.items[1].* == .atom){
+											return expr.list.items[1];
+										}
+										return try self.compute(bind.expr.list.items[1].list, err);
+									}
+									const updated = try apply_args(self.mem, expr, bind, err);
+									std.debug.assert(updated.* == .list);
+									return try self.compute(updated.list, err);
+								}
+							}
+							return bind.expr;
+						}
+					}
 				}
 			}
 		}
 		return expr;
 	}
 };
+
+pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *Buffer(Error)) ParseError!*Expr {
+	//TODO variadic case
+	std.debug.assert(expr.* == .list);
+	std.debug.assert(expr.list.items[0].* == .atom);
+	std.debug.assert(bind.args.* == .list);
+	if (expr.list.items.len-1 < bind.args.list.items.len){
+		err.append(set_error(mem, expr.list.items[0].atom.pos, "Too few arguments for invocation, expected {}, found {}\n", .{expr.list.items.len, bind.args.list.items.len}))
+			catch unreachable;
+		return ParseError.UnexpectedToken;
+	}
+	var argmap = Map(*Expr).init(mem.*);
+	for (bind.args.list.items, expr.list.items) |argname, application| {
+		if (argname.* == .list){
+			err.append(set_error(mem, bind.name.pos, "Expected argument names to be atoms\n", .{}))
+				catch unreachable;
+		}
+		argmap.put(argname.atom.text, application)
+			catch unreachable;
+	}
+	return distribute_args(argmap, bind.expr);
+}
+
+pub fn distribute_args(argmap: Map(*Expr), expr: *Expr) *Expr {
+	switch (expr.*){
+		.atom => {
+			if (argmap.get(expr.atom.text)) |replacement| {
+				return replacement;
+			}
+			return expr;
+		},
+		.list => {
+			for (0 .. expr.list.items.len) |i| {
+				expr.list.items[i] = distribute_args(argmap, expr.list.items[i]);
+			}
+			return expr;
+		}
+	}
+	unreachable;
+}
 
 pub fn expr_to_bind(mem: *const std.mem.Allocator, bind: *Expr, err: *Buffer(Error)) ParseError!Bind {
 	if (bind.* == .atom){
@@ -500,8 +599,8 @@ pub fn expr_to_bind(mem: *const std.mem.Allocator, bind: *Expr, err: *Buffer(Err
 		return ParseError.UnexpectedToken;
 	}
 	return Bind{
-		.name = bind.list.items[0].atom,
-		.args = bind.list.items[1].*,
-		.expr = bind.list.items[2].*
+		.name = bind.list.items[1].atom,
+		.args = bind.list.items[2],
+		.expr = bind.list.items[3]
 	};
 }
