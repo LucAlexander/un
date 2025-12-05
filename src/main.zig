@@ -61,16 +61,22 @@ pub fn main() !void {
 		show_token(token);
 	}
 	std.debug.print("\n", .{});
-	const program = parse_program(&mem, tokens.items, &error_log) catch {
+	const raw_expressions = parse_program(&mem, tokens.items, &error_log) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
 		}
 		return;
 	};
-	for (program.items) |expr| {
+	for (raw_expressions.items) |expr| {
 		show_expr(expr, 1);
 	}
 	std.debug.print("\n", .{});
+	_ = Program.init(&mem, raw_expressions, &error_log) catch {
+		for (error_log.items) |err| {
+			show_error(contents, err);
+		}
+		return;
+	};
 }
 
 pub fn show_token(token: Token) void {
@@ -350,7 +356,7 @@ pub fn parse_program(mem: *const std.mem.Allocator, tokens: []Token, err: *Buffe
 				catch unreachable;
 			continue;
 		}
-		err.append(set_error(mem, i, "Unexpected token for beginning of expression, expected (, found {s}", .{tokens[i].text}))
+		err.append(set_error(mem, tokens[i].pos, "Unexpected token for beginning of expression, expected (, found {s}", .{tokens[i].text}))
 			catch unreachable;
 		return ParseError.UnexpectedToken;
 	}
@@ -367,7 +373,7 @@ pub fn parse_sexpr(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err:
 	};
 	i.* += 1;
 	if (i.* == tokens.len){
-		err.append(set_error(mem, i.*, "Unexpected end of file in s expression\n", .{}))
+		err.append(set_error(mem, tokens[i.*-1].pos, "Unexpected end of file in s expression\n", .{}))
 			catch unreachable;
 		return ParseError.UnexpectedEOF;
 	}
@@ -390,7 +396,7 @@ pub fn parse_sexpr(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err:
 			i.* += 1;
 		}
 		if (i.* == tokens.len){
-			err.append(set_error(mem, i.*, "Unexpected end of file in s expression\n", .{}))
+			err.append(set_error(mem, tokens[i.*-1].pos, "Unexpected end of file in s expression\n", .{}))
 				catch unreachable;
 			return ParseError.UnexpectedEOF;
 		}
@@ -398,4 +404,70 @@ pub fn parse_sexpr(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, err:
 	}
 	i.* += 1;
 	return expr;
+}
+
+const Bind = struct {
+	name: Token,
+	args: Expr,
+	expr: Expr
+};
+
+const Program = struct {
+	substrate: *Expr,
+	binds: Buffer(Bind),
+	
+	pub fn init(mem: *const std.mem.Allocator, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!Program {
+		var binds = Buffer(Bind).init(mem.*);
+		var substrate: ?*Expr = null;
+		for (program.items) |expr| {
+			if (expr.* == .atom){
+				err.append(set_error(mem, expr.atom.pos, "Global atom {s}\n", .{expr.atom.text}))
+					catch unreachable;
+				return ParseError.UnexpectedToken;
+			}
+			if (expr.list.items.len != 0){
+				if (expr.list.items[0].* == .atom){
+					if (expr.list.items[0].atom.tag == .BIND){
+						const bind = try expr_to_bind(mem, expr, err);
+						binds.append(bind)
+							catch unreachable;
+						continue;
+					}
+				}
+				substrate = expr;
+			}
+		}
+		if (substrate) |sub| {
+			return Program{
+				.substrate = sub,
+				.binds = binds
+			};
+		}
+		err.append(set_error(mem, 0, "No substrate entry point found\n", .{}))
+			catch unreachable;
+		return ParseError.UnexpectedEOF;
+	}
+};
+
+pub fn expr_to_bind(mem: *const std.mem.Allocator, bind: *Expr, err: *Buffer(Error)) ParseError!Bind {
+	if (bind.* == .atom){
+		err.append(set_error(mem, bind.atom.pos, "Expected bind, found {s}\n", .{bind.atom.text}))
+			catch unreachable;
+		return ParseError.UnexpectedToken;
+	}
+	if (bind.list.items.len != 4){
+		err.append(set_error(mem, bind.atom.pos, "Expected 3 arguments for bind special form, found {}\n", .{bind.list.items.len}))
+			catch unreachable;
+		return ParseError.UnexpectedToken;
+	}
+	if (bind.list.items[0].* == .list){
+		err.append(set_error(mem, bind.atom.pos, "Expected token for bind name, found list\n", .{}))
+			catch unreachable;
+		return ParseError.UnexpectedToken;
+	}
+	return Bind{
+		.name = bind.list.items[0].atom,
+		.args = bind.list.items[1].*,
+		.expr = bind.list.items[2].*
+	};
 }
