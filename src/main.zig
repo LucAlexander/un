@@ -192,8 +192,8 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	var tokens = Buffer(Token).init(mem.*);
 	var keywords = Map(TOKEN).init(mem.*);
 	keywords.put("bind", .BIND) catch unreachable;
-	keywords.put("block", .BIND) catch unreachable;
-	keywords.put("comptime", .BIND) catch unreachable;
+	keywords.put("block", .BLOCK) catch unreachable;
+	keywords.put("comp", .COMP) catch unreachable;
 	while (i < text.len) {
 		var c = text[i];
 		var token = Token {
@@ -527,12 +527,16 @@ const Program = struct {
 										}
 										return try self.compute(bind.expr.list.items[1].list, err);
 									}
+									if (bind.expr.list.items[1].* == .atom){
+										err.append(set_error(self.mem, bind.expr.list.items[1].atom.pos, "Expected program, found {s}\n", .{bind.expr.list.items[1].atom.text}))
+											catch unreachable;
+									}
 									const updated = try apply_args(self.mem, expr, bind, err);
 									std.debug.assert(updated.* == .list);
-									return try self.compute(updated.list, err);
+									return try self.compute(updated.list.items[1].list, err);
 								}
 							}
-							return bind.expr;
+							return expr;
 						}
 					}
 				}
@@ -543,7 +547,6 @@ const Program = struct {
 };
 
 pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *Buffer(Error)) ParseError!*Expr {
-	//TODO variadic case
 	std.debug.assert(expr.* == .list);
 	std.debug.assert(expr.list.items[0].* == .atom);
 	std.debug.assert(bind.args.* == .list);
@@ -553,7 +556,7 @@ pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *
 		return ParseError.UnexpectedToken;
 	}
 	var argmap = Map(*Expr).init(mem.*);
-	for (bind.args.list.items, expr.list.items) |argname, application| {
+	for (bind.args.list.items, expr.list.items[1..]) |argname, application| {
 		if (argname.* == .list){
 			err.append(set_error(mem, bind.name.pos, "Expected argument names to be atoms\n", .{}))
 				catch unreachable;
