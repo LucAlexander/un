@@ -71,7 +71,8 @@ pub fn main() !void {
 		show_expr(expr, 1);
 	}
 	std.debug.print("\n", .{});
-	_ = Program.init(&mem, raw_expressions, &error_log) catch {
+	var program = Program.init(&mem);
+	_ = program.compute(&mem, raw_expressions, &error_log) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
 		}
@@ -413,11 +414,15 @@ const Bind = struct {
 };
 
 const Program = struct {
-	substrate: *Expr,
-	binds: Buffer(Bind),
+	binds: Map(Bind),
 	
-	pub fn init(mem: *const std.mem.Allocator, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!Program {
-		var binds = Buffer(Bind).init(mem.*);
+	pub fn init(mem: *const std.mem.Allocator) Program {
+		return Program {
+			.binds = Map(Bind).init(mem.*)
+		};
+	}
+	
+	pub fn compute(self: *Program, mem: *const std.mem.Allocator, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
 		var substrate: ?*Expr = null;
 		for (program.items) |expr| {
 			if (expr.* == .atom){
@@ -429,7 +434,7 @@ const Program = struct {
 				if (expr.list.items[0].* == .atom){
 					if (expr.list.items[0].atom.tag == .BIND){
 						const bind = try expr_to_bind(mem, expr, err);
-						binds.append(bind)
+						self.binds.put(bind.name.text, bind)
 							catch unreachable;
 						continue;
 					}
@@ -438,10 +443,7 @@ const Program = struct {
 			}
 		}
 		if (substrate) |sub| {
-			return Program{
-				.substrate = sub,
-				.binds = binds
-			};
+			return sub;
 		}
 		err.append(set_error(mem, 0, "No substrate entry point found\n", .{}))
 			catch unreachable;
