@@ -72,7 +72,7 @@ pub fn main() !void {
 	}
 	std.debug.print("\n", .{});
 	var program = Program.init(&mem);
-	_ = program.compute(&mem, raw_expressions, &error_log) catch {
+	_ = program.compute(raw_expressions, &error_log) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
 		}
@@ -415,25 +415,27 @@ const Bind = struct {
 
 const Program = struct {
 	binds: Map(Bind),
+	mem: *const std.mem.Allocator,
 	
 	pub fn init(mem: *const std.mem.Allocator) Program {
 		return Program {
-			.binds = Map(Bind).init(mem.*)
+			.binds = Map(Bind).init(mem.*),
+			.mem=mem
 		};
 	}
 	
-	pub fn compute(self: *Program, mem: *const std.mem.Allocator, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
+	pub fn compute(self: *Program, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
 		var substrate: ?*Expr = null;
 		for (program.items) |expr| {
 			if (expr.* == .atom){
-				err.append(set_error(mem, expr.atom.pos, "Global atom {s}\n", .{expr.atom.text}))
+				err.append(set_error(self.mem, expr.atom.pos, "Global atom {s}\n", .{expr.atom.text}))
 					catch unreachable;
 				return ParseError.UnexpectedToken;
 			}
 			if (expr.list.items.len != 0){
 				if (expr.list.items[0].* == .atom){
 					if (expr.list.items[0].atom.tag == .BIND){
-						const bind = try expr_to_bind(mem, expr, err);
+						const bind = try expr_to_bind(self.mem, expr, err);
 						self.binds.put(bind.name.text, bind)
 							catch unreachable;
 						continue;
@@ -443,11 +445,41 @@ const Program = struct {
 			}
 		}
 		if (substrate) |sub| {
-			return sub;
+			return try self.descend(sub, err);
 		}
-		err.append(set_error(mem, 0, "No substrate entry point found\n", .{}))
+		err.append(set_error(self.mem, 0, "No substrate entry point found\n", .{}))
 			catch unreachable;
 		return ParseError.UnexpectedEOF;
+	}
+
+	pub fn descend(self: *Program, expr: *Expr, err: *Buffer(Error)) ParseError!*Expr {
+		switch (expr.*){
+			.atom => {
+				return expr;
+			},
+			.list => {
+				if (expr.list.items.len == 0){
+					return expr;
+				}
+				while (expr.list.items[0].* != .atom){
+					expr.list.items[0] = try self.descend(expr.list.items[0], err);
+				}
+				if (expr.list.items[0].atom.tag == .BIND){
+					err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Nexted bind\n", .{}))
+						catch unreachable;
+					return ParseError.UnexpectedToken;
+				}
+				for (1..expr.list.items.len) |i| {
+					expr.list.items[i] = try self.descend(expr.list.items[i], err);
+				}
+				if (self.binds.get(expr.list.items[0].atom.text)) |bind| {
+					//TODO check for what kind
+					//TODO if comptime or constant expand
+					//TODO else retain call structure
+				}
+			}
+		}
+		return expr;
 	}
 };
 
