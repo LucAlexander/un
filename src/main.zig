@@ -589,7 +589,7 @@ const Program = struct {
 									return try self.compute(updated.list.items[1].list, err);
 								}
 							}
-							return expr;
+							return try apply_args(self.mem, expr, bind, err);
 						}
 					}
 				}
@@ -660,3 +660,8 @@ pub fn expr_to_bind(mem: *const std.mem.Allocator, bind: *Expr, err: *Buffer(Err
 		.expr = bind.list.items[3]
 	};
 }
+
+//TODO unwrap
+//TODO literal
+//TODO comp staging
+//TODO comp compute hook
