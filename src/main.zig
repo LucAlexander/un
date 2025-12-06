@@ -477,7 +477,21 @@ const Program = struct {
 					expr.list.items[0] = try self.descend(expr.list.items[0], err);
 				}
 				if (expr.list.items[0].atom.tag == .BIND){
-					_ = try expr_to_bind(self.mem, expr, err);
+					const bind = try expr_to_bind(self.mem, expr, err);
+					if (bind.expr.* == .list){
+						if (bind.expr.list.items[0].* == .atom){
+							if (bind.expr.list.items[0].atom.tag == .COMP){
+								self.binds.put(bind.name.text, bind)
+									catch unreachable;
+								const nop = self.mem.create(Expr)
+									catch unreachable;
+								nop.* = Expr{
+									.list = Buffer(*Expr).init(self.mem.*)
+								};
+								return nop;
+							}
+						}
+					}
 					expr.list.items[3] = try self.descend(expr.list.items[3], err);
 					return expr;
 				}
