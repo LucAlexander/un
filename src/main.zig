@@ -477,9 +477,9 @@ const Program = struct {
 					expr.list.items[0] = try self.descend(expr.list.items[0], err);
 				}
 				if (expr.list.items[0].atom.tag == .BIND){
-					err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Nexted bind\n", .{}))
-						catch unreachable;
-					return ParseError.UnexpectedToken;
+					_ = try expr_to_bind(self.mem, expr, err);
+					expr.list.items[3] = try self.descend(expr.list.items[3], err);
+					return expr;
 				}
 				for (1..expr.list.items.len) |i| {
 					expr.list.items[i] = try self.descend(expr.list.items[i], err);
@@ -550,7 +550,7 @@ pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *
 	std.debug.assert(expr.* == .list);
 	std.debug.assert(expr.list.items[0].* == .atom);
 	std.debug.assert(bind.args.* == .list);
-	if (expr.list.items.len-1 < bind.args.list.items.len){
+	if (expr.list.items.len-1 != bind.args.list.items.len){
 		err.append(set_error(mem, expr.list.items[0].atom.pos, "Too few arguments for invocation, expected {}, found {}\n", .{expr.list.items.len, bind.args.list.items.len}))
 			catch unreachable;
 		return ParseError.UnexpectedToken;
