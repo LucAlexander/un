@@ -9,6 +9,7 @@ const Error = struct {
 
 const TOKEN = enum(u64) {
 	BIND,
+	USE,
 	IDEN,
 	BLOCK,
 	OPEN,
@@ -34,21 +35,10 @@ pub fn main() !void {
 	var main_mem = std.heap.ArenaAllocator.init(allocator);
 	defer main_mem.deinit();
 	const mem = main_mem.allocator();
-	const filename = "test.un";
-	var infile = std.fs.cwd().openFile(filename, .{}) catch {
-		std.debug.print("File not found: {s}\n", .{filename});
-		return;
-	};
-	defer infile.close();
-	const stat = infile.stat() catch {
-		std.debug.print("Errored file stat: {s}\n", .{filename});
-		return;
-	};
-	const contents = infile.readToEndAlloc(allocator, stat.size+1) catch {
-		std.debug.print("Error reading file: {s}\n", .{filename});
-		return;
-	};
-	defer allocator.free(contents);
+	var filename = Buffer(u8).init(mem);
+	filename.appendSlice("test.un")
+		catch unreachable;
+	const contents = try get_contents(&mem, filename.items);
 	var error_log = Buffer(Error).init(mem);
 	const tokens = tokenize(&mem, contents, &error_log);
 	if (error_log.items.len != 0){
@@ -79,6 +69,23 @@ pub fn main() !void {
 		return;
 	};
 	show_expr(val, 1);
+}
+
+pub fn get_contents(mem: *const std.mem.Allocator, filename: []u8) ![]u8 {
+	var infile = std.fs.cwd().openFile(filename, .{}) catch |err| {
+		std.debug.print("File not found: {s}\n", .{filename});
+		return err;
+	};
+	defer infile.close();
+	const stat = infile.stat() catch |err| {
+		std.debug.print("Errored file stat: {s}\n", .{filename});
+		return err;
+	};
+	const contents = infile.readToEndAlloc(mem.*, stat.size+1) catch |err| {
+		std.debug.print("Error reading file: {s}\n", .{filename});
+		return err;
+	};
+	return contents;
 }
 
 pub fn show_token(token: Token) void {
@@ -192,6 +199,7 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	var tokens = Buffer(Token).init(mem.*);
 	var keywords = Map(TOKEN).init(mem.*);
 	keywords.put("bind", .BIND) catch unreachable;
+	keywords.put("use", .USE) catch unreachable;
 	keywords.put("block", .BLOCK) catch unreachable;
 	keywords.put("comp", .COMP) catch unreachable;
 	while (i < text.len) {
@@ -424,8 +432,9 @@ const Program = struct {
 			.mem=mem
 		};
 	}
-	
+
 	pub fn compute(self: *Program, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
+					
 		var old_binds = self.binds.count();
 		while (true){
 			for (program.items) |expr| {
@@ -503,6 +512,36 @@ const Program = struct {
 						return expr.list.items[1];
 					}
 					return try self.compute(expr.list.items[1].list, err);
+				}
+				if (expr.list.items[0].atom.tag == .USE){
+					if (expr.list.items.len != 2){
+						err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected name of file for module code import, found {} arguments instead\n", .{expr.list.items.len}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					}
+					const filename = expr.list.items[1];
+					if (filename.* != .atom){
+						err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected name of file for module, found list instead\n", .{}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					}
+					if (filename.atom.tag != .STR){
+						err.append(set_error(self.mem, filename.atom.pos, "Expected name of file for module, found {s} instead\n", .{filename.atom.text}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					}
+					const extracted = filename.atom.text[1..filename.atom.text.len-1];
+					const contents = get_contents(self.mem, extracted) catch {
+						err.append(set_error(self.mem, filename.atom.pos, "Couldnt open file {s}\n", .{filename.atom.text}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					};
+					const tokens = tokenize(self.mem, contents, err);
+					if (err.items.len != 0){
+						return ParseError.UnexpectedToken;
+					}
+					const raw_expressions = try parse_program(self.mem, tokens.items, err);
+					return try self.compute(raw_expressions, err);
 				}
 				if (self.binds.get(expr.list.items[0].atom.text)) |bind| {
 					switch (bind.expr.*){
