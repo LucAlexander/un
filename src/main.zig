@@ -11,18 +11,16 @@ const TOKEN = enum(u64) {
 	BIND,
 	USE,
 	IDEN,
-	BLOCK,
 	OPEN,
 	CLOSE,
 	INT,
 	STR,
 	CHAR,
 	COMP,
-	QUASI,
+	REF,
 	FLAT,
-	UNQUOTE
+	UID
 };
-//NOTE the underlying IR is emitted and retokenized
 
 const Token = struct {
 	tag: TOKEN,
@@ -184,11 +182,11 @@ pub fn set_error(mem: *const std.mem.Allocator, index:u64, comptime fmt: []const
 
 pub fn symbol(c: u8) bool {
 	if (c == '!' or c == '#' or c == '$' or c == '%' or
-		c == '^' or c == '&' or c == '*' or c == '+' or
+		c == '^' or c == '`' or c == '*' or c == '+' or
 		c == '-' or c == '/' or c == '?' or c == ':' or
 		c == ';' or c == '.' or c == '~' or c == '<' or
 		c == '>' or c == '{' or c == '}' or c == '[' or
-		c == ']' or c == '='){
+		c == ']' or c == '=' or c == ','){
 		return true;
 	}
 	return false;
@@ -200,7 +198,9 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	var keywords = Map(TOKEN).init(mem.*);
 	keywords.put("bind", .BIND) catch unreachable;
 	keywords.put("use", .USE) catch unreachable;
-	keywords.put("block", .BLOCK) catch unreachable;
+	keywords.put("ref", .REF) catch unreachable;
+	keywords.put("flat", .FLAT) catch unreachable;
+	keywords.put("uid", .UID) catch unreachable;
 	keywords.put("comp", .COMP) catch unreachable;
 	while (i < text.len) {
 		var c = text[i];
@@ -216,9 +216,6 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 			},
 			'(' => {token.tag = .OPEN;},
 			')' => {token.tag = .CLOSE;},
-			'`' => {token.tag = .QUASI;},
-			',' => {token.tag = .UNQUOTE;},
-			'@' => {token.tag = .FLAT;},
 			else => {}
 		}
 		if (token.tag != .IDEN){
@@ -483,6 +480,32 @@ const Program = struct {
 					return expr;
 				}
 				while (expr.list.items[0].* != .atom){
+					if (expr.list.items[0].list.items.len != 0){
+						if (expr.list.items[0].list.items[0].* == .atom){
+							if (expr.list.items[0].list.items[0].atom.tag == .FLAT){
+								if (expr.list.items[0].list.items.len != 2){
+									err.append(set_error(self.mem, expr.list.items[0].list.items[0].atom.pos, "Expected 2 arguments for flatten, found {s}\n", .{expr.list.items[0].list.items[0].atom.text}))
+										catch unreachable;
+								}
+								const val = try self.descend(expr.list.items[0].list.items[1], err);
+								if (val.* == .atom){
+									expr.list.items[0] = val;
+									break;
+								}
+								var flathead = Expr{
+									.list = Buffer(*Expr).init(self.mem.*)
+								};
+								flathead.list.appendSlice(val.list.items)
+									catch unreachable;
+								flathead.list.appendSlice(expr.list.items[1..])
+									catch unreachable;
+								const loc = self.mem.create(Expr)
+									catch unreachable;
+								loc.* = flathead;
+								return try self.descend(loc, err);
+							}
+						}
+					}
 					expr.list.items[0] = try self.descend(expr.list.items[0], err);
 				}
 				if (expr.list.items[0].atom.tag == .BIND){
@@ -504,14 +527,40 @@ const Program = struct {
 					expr.list.items[3] = try self.descend(expr.list.items[3], err);
 					return expr;
 				}
-				for (1..expr.list.items.len) |i| {
+				var i: u64 = 1;
+				while (i < expr.list.items.len){
+					if (expr.list.items[i].* == .list){
+						if (expr.list.items[i].list.items.len != 0){
+							if (expr.list.items[i].list.items[0].* == .atom){
+								if (expr.list.items[i].list.items[0].atom.tag == .FLAT){
+									if (expr.list.items[i].list.items.len != 2){
+										err.append(set_error(self.mem, expr.list.items[i].list.items[0].atom.pos, "Expected 2 arguments for flatten, found {s}\n", .{expr.list.items[i].list.items[0].atom.text}))
+											catch unreachable;
+									}
+									const val = try self.descend(expr.list.items[i].list.items[1], err);
+									if (val.* == .atom){
+										expr.list.items[i] = val;
+										continue;
+									}
+									_ = expr.list.orderedRemove(i);
+									expr.list.insertSlice(i, val.list.items)
+										catch unreachable;
+									continue;
+								}
+							}
+						}
+					}
 					expr.list.items[i] = try self.descend(expr.list.items[i], err);
+					i += 1;
 				}
 				if (expr.list.items[0].atom.tag == .COMP){
 					if (expr.list.items[1].* == .atom){
 						return expr.list.items[1];
 					}
 					return try self.compute(expr.list.items[1].list, err);
+				}
+				if (expr.list.items[0].atom.tag == .UID){
+					//TODO
 				}
 				if (expr.list.items[0].atom.tag == .USE){
 					if (expr.list.items.len != 2){
@@ -566,29 +615,6 @@ const Program = struct {
 							if (bind.expr.list.items.len == 0){
 								return bind.expr;
 							}
-							else if (bind.expr.list.items[0].* == .atom){
-								if (bind.expr.list.items[0].atom.tag == .COMP){
-									if (bind.args.* == .atom){
-										if (bind.expr.list.items[1].* == .atom){
-											return expr.list.items[1];
-										}
-										return try self.compute(bind.expr.list.items[1].list, err);
-									}
-									if (bind.args.list.items.len == 0){
-										if (bind.expr.list.items[1].* == .atom){
-											return expr.list.items[1];
-										}
-										return try self.compute(bind.expr.list.items[1].list, err);
-									}
-									if (bind.expr.list.items[1].* == .atom){
-										err.append(set_error(self.mem, bind.expr.list.items[1].atom.pos, "Expected program, found {s}\n", .{bind.expr.list.items[1].atom.text}))
-											catch unreachable;
-									}
-									const updated = try apply_args(self.mem, expr, bind, err);
-									std.debug.assert(updated.* == .list);
-									return try self.compute(updated.list.items[1].list, err);
-								}
-							}
 							return try apply_args(self.mem, expr, bind, err);
 						}
 					}
@@ -604,12 +630,11 @@ pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *
 	std.debug.assert(expr.list.items[0].* == .atom);
 	std.debug.assert(bind.args.* == .list);
 	if (expr.list.items.len-1 != bind.args.list.items.len){
-		err.append(set_error(mem, expr.list.items[0].atom.pos, "Too few arguments for invocation, expected {}, found {}\n", .{expr.list.items.len, bind.args.list.items.len}))
-			catch unreachable;
-		return ParseError.UnexpectedToken;
+		return expr;
 	}
 	var argmap = Map(*Expr).init(mem.*);
 	for (bind.args.list.items, expr.list.items[1..]) |argname, application| {
+		//TODO ref
 		if (argname.* == .list){
 			err.append(set_error(mem, bind.name.pos, "Expected argument names to be atoms\n", .{}))
 				catch unreachable;
