@@ -2,6 +2,8 @@ const std = @import("std");
 const Buffer = std.ArrayList;
 const Map = std.StringHashMap;
 
+var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
 const Error = struct {
 	message: []u8,
 	pos: u64
@@ -17,7 +19,6 @@ const TOKEN = enum(u64) {
 	STR,
 	CHAR,
 	COMP,
-	REF,
 	FLAT,
 	UID
 };
@@ -198,7 +199,6 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	var keywords = Map(TOKEN).init(mem.*);
 	keywords.put("bind", .BIND) catch unreachable;
 	keywords.put("use", .USE) catch unreachable;
-	keywords.put("ref", .REF) catch unreachable;
 	keywords.put("flat", .FLAT) catch unreachable;
 	keywords.put("uid", .UID) catch unreachable;
 	keywords.put("comp", .COMP) catch unreachable;
@@ -486,6 +486,7 @@ const Program = struct {
 								if (expr.list.items[0].list.items.len != 2){
 									err.append(set_error(self.mem, expr.list.items[0].list.items[0].atom.pos, "Expected 2 arguments for flatten, found {s}\n", .{expr.list.items[0].list.items[0].atom.text}))
 										catch unreachable;
+									return ParseError.UnexpectedToken;
 								}
 								const val = try self.descend(expr.list.items[0].list.items[1], err);
 								if (val.* == .atom){
@@ -527,32 +528,6 @@ const Program = struct {
 					expr.list.items[3] = try self.descend(expr.list.items[3], err);
 					return expr;
 				}
-				var i: u64 = 1;
-				while (i < expr.list.items.len){
-					if (expr.list.items[i].* == .list){
-						if (expr.list.items[i].list.items.len != 0){
-							if (expr.list.items[i].list.items[0].* == .atom){
-								if (expr.list.items[i].list.items[0].atom.tag == .FLAT){
-									if (expr.list.items[i].list.items.len != 2){
-										err.append(set_error(self.mem, expr.list.items[i].list.items[0].atom.pos, "Expected 2 arguments for flatten, found {s}\n", .{expr.list.items[i].list.items[0].atom.text}))
-											catch unreachable;
-									}
-									const val = try self.descend(expr.list.items[i].list.items[1], err);
-									if (val.* == .atom){
-										expr.list.items[i] = val;
-										continue;
-									}
-									_ = expr.list.orderedRemove(i);
-									expr.list.insertSlice(i, val.list.items)
-										catch unreachable;
-									continue;
-								}
-							}
-						}
-					}
-					expr.list.items[i] = try self.descend(expr.list.items[i], err);
-					i += 1;
-				}
 				if (expr.list.items[0].atom.tag == .COMP){
 					if (expr.list.items[1].* == .atom){
 						return expr.list.items[1];
@@ -560,7 +535,42 @@ const Program = struct {
 					return try self.compute(expr.list.items[1].list, err);
 				}
 				if (expr.list.items[0].atom.tag == .UID){
-					//TODO
+					if (expr.list.items.len != 3){
+						err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 3 arguments for uid block\n", .{}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					}
+					if (expr.list.items[1].* != .list){
+						err.append(set_error(self.mem, expr.list.items[1].atom.pos, "Expected list of aliases for uid block, found atom {s}\n", .{expr.list.items[1].atom.text}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					}
+					if (expr.list.items[2].* != .list){
+						err.append(set_error(self.mem, expr.list.items[2].atom.pos, "Expected list for aliasing, found atom {s}\n", .{expr.list.items[2].atom.text}))
+							catch unreachable;
+						return ParseError.UnexpectedToken;
+					}
+					var aliasmap = Map(*Expr).init(self.mem.*);
+					for (expr.list.items[1].list.items) |alias| {
+						if (alias.* != .atom){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected alias atom, found list\n", .{}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						const loc = self.mem.create(Expr)
+							catch unreachable;
+						loc.* = Expr{
+							.atom = Token {
+								.pos = alias.atom.pos,
+								.text = uid(self.mem),
+								.tag = .IDEN
+							}
+						};
+						aliasmap.put(alias.atom.text, loc)
+							catch unreachable;
+					}
+					const replace = distribute_args(aliasmap, expr.list.items[2]);
+					return try self.descend(replace, err);
 				}
 				if (expr.list.items[0].atom.tag == .USE){
 					if (expr.list.items.len != 2){
@@ -592,6 +602,33 @@ const Program = struct {
 					const raw_expressions = try parse_program(self.mem, tokens.items, err);
 					return try self.compute(raw_expressions, err);
 				}
+				var i: u64 = 1;
+				while (i < expr.list.items.len){
+					if (expr.list.items[i].* == .list){
+						if (expr.list.items[i].list.items.len != 0){
+							if (expr.list.items[i].list.items[0].* == .atom){
+								if (expr.list.items[i].list.items[0].atom.tag == .FLAT){
+									if (expr.list.items[i].list.items.len != 2){
+										err.append(set_error(self.mem, expr.list.items[i].list.items[0].atom.pos, "Expected 2 arguments for flatten, found {s}\n", .{expr.list.items[i].list.items[0].atom.text}))
+											catch unreachable;
+										return ParseError.UnexpectedToken;
+									}
+									const val = try self.descend(expr.list.items[i].list.items[1], err);
+									if (val.* == .atom){
+										expr.list.items[i] = val;
+										continue;
+									}
+									_ = expr.list.orderedRemove(i);
+									expr.list.insertSlice(i, val.list.items)
+										catch unreachable;
+									continue;
+								}
+							}
+						}
+					}
+					expr.list.items[i] = try self.descend(expr.list.items[i], err);
+					i += 1;
+				}
 				if (self.binds.get(expr.list.items[0].atom.text)) |bind| {
 					switch (bind.expr.*){
 						.atom => {
@@ -608,6 +645,9 @@ const Program = struct {
 							};
 							wrapper.list.append(bind.expr)
 								catch unreachable;
+							if (wrapper.list.items.len-1 != bind.args.list.items.len-1){
+								return wrapper;
+							}
 							const updated = try apply_args(self.mem, wrapper, bind, err);
 							return try self.compute(updated.list, err);
 						},
@@ -615,7 +655,11 @@ const Program = struct {
 							if (bind.expr.list.items.len == 0){
 								return bind.expr;
 							}
-							return try apply_args(self.mem, expr, bind, err);
+							if (expr.list.items.len-1 != bind.args.list.items.len){
+								return expr;
+							}
+							const replace = try apply_args(self.mem, expr, bind, err);
+							return try self.descend(replace, err);
 						}
 					}
 				}
@@ -629,15 +673,13 @@ pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *
 	std.debug.assert(expr.* == .list);
 	std.debug.assert(expr.list.items[0].* == .atom);
 	std.debug.assert(bind.args.* == .list);
-	if (expr.list.items.len-1 != bind.args.list.items.len){
-		return expr;
-	}
+	std.debug.assert(expr.list.items.len-1 == bind.args.list.items.len);
 	var argmap = Map(*Expr).init(mem.*);
 	for (bind.args.list.items, expr.list.items[1..]) |argname, application| {
-		//TODO ref
 		if (argname.* == .list){
 			err.append(set_error(mem, bind.name.pos, "Expected argument names to be atoms\n", .{}))
 				catch unreachable;
+			return ParseError.UnexpectedToken;
 		}
 		argmap.put(argname.atom.text, application)
 			catch unreachable;
@@ -684,6 +726,32 @@ pub fn expr_to_bind(mem: *const std.mem.Allocator, bind: *Expr, err: *Buffer(Err
 		.args = bind.list.items[2],
 		.expr = bind.list.items[3]
 	};
+}
+
+pub fn uid(mem: *const std.mem.Allocator) []u8 {
+	var new = mem.alloc(u8, internal_uid.len)
+		catch unreachable;
+	var i: u64 = 0;
+	var inc: bool = false;
+	while (i < new.len){
+		if (internal_uid[i] < 'Z'){
+			new[i] = internal_uid[i] + 1;
+			i += 1;
+			break;
+		}
+		new[i] = 'A';
+		inc = true;
+		i += 1;
+	}
+	if (inc){
+		new[i] = internal_uid[i]+1;
+	}
+	while (i < new.len){
+		new[i] = internal_uid[i];
+		i += 1;
+	}
+	internal_uid = new;
+	return new;
 }
 
 //TODO unwrap
