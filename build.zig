@@ -65,6 +65,11 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
+
+	const vm = b.createModule(.{
+		.root_source_file = b.path("src/vm.zig")
+	});
+	exe.root_module.addImport("vm", vm);
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).

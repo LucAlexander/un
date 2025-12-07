@@ -1,4 +1,5 @@
 const std = @import("std");
+const ir = @import("vm");
 const Buffer = std.ArrayList;
 const Map = std.StringHashMap;
 
@@ -431,7 +432,6 @@ const Program = struct {
 	}
 
 	pub fn compute(self: *Program, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
-					
 		var old_binds = self.binds.count();
 		while (true){
 			for (program.items) |expr| {
@@ -464,10 +464,30 @@ const Program = struct {
 						old_binds = self.binds.count();
 						continue;
 					}
+					if (self.parse_ir(candidate)) |repr| {
+						return self.evaluate(repr);
+					}
 					return candidate;
 				}
 			}
 		}
+	}
+
+	pub fn parse_ir(self: *Program, expr: *Expr) ?Buffer(ir.Instruction) {
+		if (expr.* == .atom){
+			return null;
+		}
+		if (expr.list.items.len == 0){
+			return null;
+		}
+		//TODO parse into ir.Instruction representation
+		//self normalize, then deal with register coloring, then deal with labels
+	}
+
+	pub fn evaluate(self: *Program, repr: []ir.instruction) *Expr {
+		var error_buffer = Buffer(ir.Error).init(self.mem.*);
+		const bytecode = assemble_bytecode(self.mem, repr, &error_buffer) catch unreachable;
+		//TODO lift out reifeid list structure
 	}
 
 	pub fn descend(self: *Program, expr: *Expr, err: *Buffer(Error)) ParseError!*Expr {
@@ -754,7 +774,7 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	return new;
 }
 
-//TODO unwrap
-//TODO literal
+//TODO IR integration
+//TODO reification both ways
 //TODO comp staging
 //TODO comp compute hook
