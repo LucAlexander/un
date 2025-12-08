@@ -16,12 +16,26 @@ const TOKEN = enum(u64) {
 	IDEN,
 	OPEN,
 	CLOSE,
-	INT,
+	NUM,
 	STR,
 	CHAR,
 	COMP,
 	FLAT,
-	UID
+	UID,
+	REG,
+	LABEL,
+	MOV,
+	ADD, SUB, MUL, DIV, MOD,
+	UADD, USUB, UMUL, UDIV, UMOD,
+	SHR, SHL,
+	AND, OR, XOR,
+	NOT, COM,
+	CMP,
+	JMP, JEQ, JNE, JGT, JGE, JLT, JLE,
+	CALL, RET,
+	PSH, POP,
+	INT,
+	AT
 };
 
 const Token = struct {
@@ -203,6 +217,38 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	keywords.put("flat", .FLAT) catch unreachable;
 	keywords.put("uid", .UID) catch unreachable;
 	keywords.put("comp", .COMP) catch unreachable;
+	keywords.put("reg", .REG) catch unreachable;
+	keywords.put("label", .LABEL) catch unreachable;
+	keywords.put("mov", .MOV) catch unreachable;
+	keywords.put("add", .ADD) catch unreachable;
+	keywords.put("sub", .SUB) catch unreachable;
+	keywords.put("mul", .MUL) catch unreachable;
+	keywords.put("div", .DIV) catch unreachable;
+	keywords.put("mod", .MOD) catch unreachable;
+	keywords.put("uadd", .UADD) catch unreachable;
+	keywords.put("usub", .USUB) catch unreachable;
+	keywords.put("umul", .UMUL) catch unreachable;
+	keywords.put("udiv", .UDIV) catch unreachable;
+	keywords.put("umod", .UMOD) catch unreachable;
+	keywords.put("shl", .SHL) catch unreachable;
+	keywords.put("shr", .SHR) catch unreachable;
+	keywords.put("and", .AND) catch unreachable;
+	keywords.put("or", .OR) catch unreachable;
+	keywords.put("xor", .XOR) catch unreachable;
+	keywords.put("not", .NOT) catch unreachable;
+	keywords.put("com", .COM) catch unreachable;
+	keywords.put("cmp", .CMP) catch unreachable;
+	keywords.put("psh", .PSH) catch unreachable;
+	keywords.put("pop", .POP) catch unreachable;
+	keywords.put("jmp", .JMP) catch unreachable;
+	keywords.put("jlt", .JLT) catch unreachable;
+	keywords.put("jgt", .JGT) catch unreachable;
+	keywords.put("jeq", .JEQ) catch unreachable;
+	keywords.put("jne", .JNE) catch unreachable;
+	keywords.put("jle", .JLE) catch unreachable;
+	keywords.put("jge", .JGE) catch unreachable;
+	keywords.put("int", .INT) catch unreachable;
+	keywords.put("at", .AT) catch unreachable;
 	while (i < text.len) {
 		var c = text[i];
 		var token = Token {
@@ -420,6 +466,13 @@ const Bind = struct {
 	expr: *Expr
 };
 
+const IRNode = union(enum){
+	instruction: ir.Instruction,
+	label: Token,
+	register: Token,
+	interrupt: *Expr
+}
+
 const Program = struct {
 	binds: Map(Bind),
 	mem: *const std.mem.Allocator,
@@ -473,6 +526,11 @@ const Program = struct {
 		}
 	}
 
+	pub fn normalize(self: *Program, normalized: *Buffer(Expr), expr: *Expr) ?*Expr {
+		//TODO return flattened expression, the return of the block
+		//TODO add subsequent instructions to normalized buffer
+	}
+
 	pub fn parse_ir(self: *Program, expr: *Expr) ?Buffer(ir.Instruction) {
 		if (expr.* == .atom){
 			return null;
@@ -480,8 +538,190 @@ const Program = struct {
 		if (expr.list.items.len == 0){
 			return null;
 		}
-		//TODO parse into ir.Instruction representation
-		//self normalize, then deal with register coloring, then deal with labels
+		const normalized = Buffer(*Expr).init(self.mem.*);
+		for (expr.list.items) |inst| {
+			if (inst == .atom){
+				return null;
+			}
+			if (inst.list.items[0].* == .list){
+				return null;
+			}
+			switch (inst.list.items[0].atom.tag){
+				.REG, .LABEL => {
+					if (inst.list.items.len != 2){
+						return null;
+					}
+					if (self.expect_token(normalized, inst.list.items[1])){
+						normalized.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.MOV => {
+					if (inst.list.items.len != 3){
+						return null;
+					}
+					if (self.expect_register(normalized, inst.list.items[1])){
+						if (self.expect_dregister(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (self.expect_register(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (self.expect_literal(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+					}
+					if (self.expect_dregister(normalized, inst.list.items[1])){
+						if (self.expect_dregister(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (self.expect_register(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (self.expect_literal(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+					}
+					return null;
+				},
+				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, ..SHL, .AND, .OR, .XOR => {
+					if (inst.list.items.len != 3){
+						return null;
+					}
+					if (self.expect_register(normalized, inst.list.items[1])){
+						if (self.expect_alu_arg(normalized, inst.list.items[2])){
+							if (self.expect_alu_arg(normalized, inst.list.items[3])){
+								normalized.append(inst)
+									catch unreachable;
+								continue;
+							}
+						}
+					}
+					return null;
+				},
+				.NOT, .COM, .CMP=> {
+					if (inst.list.items.len != 2){
+						return null;
+					}
+					if (self.expect_register(normalized, inst.list.items[1])){
+						if (self.expect_alu_arg(normalized, inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+					}
+					return null;
+				},
+				.JMP, JEQ, JNE, JGT, JGE, JLT, JLE, CALL => {
+					if (inst.list.items.len != 2){
+						return null;
+					}
+					if (self.expect_literal(normalized, inst.list.items[1])){
+						normalized.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.RET => {
+					if (inst.list.items.len != 2){
+						return null;
+					}
+					if (self.expect_alu_arg(normalized, inst.list.items[1])){
+						normalized.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.PSH, POP => {
+					if (inst.list.items.len != 2){
+						return null;
+					}
+					if (self.expect_register(normalized, inst.list.items[1])){
+						normalized.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.INT => {
+					normalized.append(inst)
+						catch unreachable;
+					continue;
+				}
+			}
+		}
+		const parsed = Buffer(IRNode).init(self.mem.*);
+		// TODO parse into ir.Instruction representation
+		// TODO reify lists into static buffers to be written into the vm memory later
+		// self normalize, then deal with register coloring, then deal with labels
+		// int is special too
+	}
+
+	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
+		return (self.expect_register(normalized, expr) or self.expect_literal(normalized, expr));
+	}
+
+	pub fn expect_register(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
+		return self.expect_token(normlaized, expr);
+	}
+
+	pub fn expect_dregister(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
+		if (expr.* == .atom){
+			return false;
+		}
+		if (expr.list.items.len != 2){
+			return false;
+		}
+		return self.expect_register(normalized, expr.list.items[1]);
+	}
+
+	pub fn expect_literal(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
+		if (expr.* == .list){
+			if (self.normalize(normalized, expr)) |norm| {
+				if (norm.* == .list){
+					return false;
+				}
+				if (norm.atom.tag == .NUM){
+					expr.* = norm;
+					return true;
+				}
+			}
+			return false;
+		}
+		if (expr.atom.tag == .NUM){
+			return true;
+		}//TODO num tokenizing
+		return false;
+	}
+
+	pub fn expect_token(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
+		if (expr.* == .list){
+			if (self.normalize(normalized, expr)) |norm| {
+				if (norm.* == .list){
+					return false;
+				}
+				expr.* = norm;
+				return true;
+			}
+			return false;
+		}
+		return true;
 	}
 
 	pub fn evaluate(self: *Program, repr: []ir.instruction) *Expr {
