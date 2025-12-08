@@ -526,8 +526,12 @@ const Program = struct {
 		}
 	}
 
-	pub fn normalize(self: *Program, normalized: *Buffer(Expr), expr: *Expr) ?*Expr {
-		for (expr.list.items[..expr.list.items.len-1]) |inst| {
+	pub fn normalize(self: *Program, normalized: *Buffer(Expr), expr: *Expr, full: bool) ?*Expr {
+		var limit = expr.list.items.len-1;
+		if (full){
+			limit += 1;
+		}
+		for (expr.list.items[..limit]) |inst| {
 			if (inst == .atom){
 				return null;
 			}
@@ -665,132 +669,8 @@ const Program = struct {
 			return null;
 		}
 		const normalized = Buffer(*Expr).init(self.mem.*);
-		for (expr.list.items) |inst| {
-			if (inst == .atom){
-				return null;
-			}
-			if (inst.list.items[0].* == .list){
-				return null;
-			}
-			switch (inst.list.items[0].atom.tag){
-				.REG, .LABEL => {
-					if (inst.list.items.len != 2){
-						return null;
-					}
-					if (self.expect_token(normalized, inst.list.items[1])){
-						normalized.append(inst)
-							catch unreachable;
-						continue;
-					}
-					return null;
-				},
-				.MOV => {
-					if (inst.list.items.len != 3){
-						return null;
-					}
-					if (self.expect_register(normalized, inst.list.items[1])){
-						if (self.expect_dregister(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-						if (self.expect_register(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-						if (self.expect_literal(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-					}
-					if (self.expect_dregister(normalized, inst.list.items[1])){
-						if (self.expect_dregister(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-						if (self.expect_register(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-						if (self.expect_literal(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-					}
-					return null;
-				},
-				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, ..SHL, .AND, .OR, .XOR => {
-					if (inst.list.items.len != 3){
-						return null;
-					}
-					if (self.expect_register(normalized, inst.list.items[1])){
-						if (self.expect_alu_arg(normalized, inst.list.items[2])){
-							if (self.expect_alu_arg(normalized, inst.list.items[3])){
-								normalized.append(inst)
-									catch unreachable;
-								continue;
-							}
-						}
-					}
-					return null;
-				},
-				.NOT, .COM, .CMP=> {
-					if (inst.list.items.len != 2){
-						return null;
-					}
-					if (self.expect_register(normalized, inst.list.items[1])){
-						if (self.expect_alu_arg(normalized, inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-					}
-					return null;
-				},
-				.JMP, JEQ, JNE, JGT, JGE, JLT, JLE, CALL => {
-					if (inst.list.items.len != 2){
-						return null;
-					}
-					if (self.expect_literal(normalized, inst.list.items[1])){
-						normalized.append(inst)
-							catch unreachable;
-						continue;
-					}
-					return null;
-				},
-				.RET => {
-					if (inst.list.items.len != 2){
-						return null;
-					}
-					if (self.expect_alu_arg(normalized, inst.list.items[1])){
-						normalized.append(inst)
-							catch unreachable;
-						continue;
-					}
-					return null;
-				},
-				.PSH, POP => {
-					if (inst.list.items.len != 2){
-						return null;
-					}
-					if (self.expect_register(normalized, inst.list.items[1])){
-						normalized.append(inst)
-							catch unreachable;
-						continue;
-					}
-					return null;
-				},
-				.INT => {
-					normalized.append(inst)
-						catch unreachable;
-					continue;
-				}
-			}
+		if (self.normalize(normalized, expr, true) == null){
+			return null;
 		}
 		const parsed = Buffer(IRNode).init(self.mem.*);
 		// TODO parse into ir.Instruction representation
