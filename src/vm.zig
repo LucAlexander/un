@@ -1099,7 +1099,7 @@ const ALUArg = union(enum) {
 	literal: u8
 };
 
-const Instruction = struct {
+pub const Instruction = struct {
 	tag: TOKEN,
 	data: union(enum) {
 		move: struct {
@@ -1154,7 +1154,7 @@ const Token = struct {
 	tag: TOKEN,
 };
 
-const Error = struct {
+pub const Error = struct {
 	message: []u8,
 	pos: u64
 };

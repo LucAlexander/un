@@ -5,6 +5,8 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
+var debug = true;
+
 const Error = struct {
 	message: []u8,
 	pos: u64
@@ -471,7 +473,7 @@ const IRNode = union(enum){
 	label: Token,
 	register: Token,
 	interrupt: *Expr
-}
+};
 
 const Program = struct {
 	binds: Map(Bind),
@@ -518,7 +520,7 @@ const Program = struct {
 						continue;
 					}
 					if (self.parse_ir(candidate)) |repr| {
-						return self.evaluate(repr);
+						return self.evaluate(repr.items);
 					}
 					return candidate;
 				}
@@ -526,13 +528,13 @@ const Program = struct {
 		}
 	}
 
-	pub fn normalize(self: *Program, normalized: *Buffer(Expr), expr: *Expr, full: bool) ?*Expr {
+	pub fn normalize(self: *Program, normalized: *Buffer(*Expr), expr: *Expr, full: bool) ?*Expr {
 		var limit = expr.list.items.len-1;
 		if (full){
 			limit += 1;
 		}
-		for (expr.list.items[..limit]) |inst| {
-			if (inst == .atom){
+		for (expr.list.items[0..limit]) |inst| {
+			if (inst.* == .atom){
 				return null;
 			}
 			if (inst.list.items[0].* == .list){
@@ -543,7 +545,7 @@ const Program = struct {
 					if (inst.list.items.len != 2){
 						return null;
 					}
-					if (self.expect_token(normalized, inst.list.items[1])){
+					if (self.expect_token(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -554,18 +556,24 @@ const Program = struct {
 					if (inst.list.items.len != 3){
 						return null;
 					}
-					if (self.expect_register(normalized, inst.list.items[1])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
 						if (self.expect_dregister(normalized, inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_register(normalized, inst.list.items[2])){
+						if (self.expect_register(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_literal(normalized, inst.list.items[2])){
+						if (self.expect_literal(normalized, &inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (inst.list.items[2].* == .list){
+							//TODO reify, replace with address
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -577,12 +585,18 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_register(normalized, inst.list.items[2])){
+						if (self.expect_register(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_literal(normalized, inst.list.items[2])){
+						if (self.expect_literal(normalized, &inst.list.items[2])){
+							normalized.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (inst.list.items[2].* == .list){
+							//TODO reify, replace with address
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -590,13 +604,13 @@ const Program = struct {
 					}
 					return null;
 				},
-				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, ..SHL, .AND, .OR, .XOR => {
+				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
 					if (inst.list.items.len != 3){
 						return null;
 					}
-					if (self.expect_register(normalized, inst.list.items[1])){
-						if (self.expect_alu_arg(normalized, inst.list.items[2])){
-							if (self.expect_alu_arg(normalized, inst.list.items[3])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
+						if (self.expect_alu_arg(normalized, &inst.list.items[2])){
+							if (self.expect_alu_arg(normalized, &inst.list.items[3])){
 								normalized.append(inst)
 									catch unreachable;
 								continue;
@@ -609,8 +623,8 @@ const Program = struct {
 					if (inst.list.items.len != 2){
 						return null;
 					}
-					if (self.expect_register(normalized, inst.list.items[1])){
-						if (self.expect_alu_arg(normalized, inst.list.items[2])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
+						if (self.expect_alu_arg(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -618,11 +632,11 @@ const Program = struct {
 					}
 					return null;
 				},
-				.JMP, JEQ, JNE, JGT, JGE, JLT, JLE, CALL => {
+				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .CALL => {
 					if (inst.list.items.len != 2){
 						return null;
 					}
-					if (self.expect_literal(normalized, inst.list.items[1])){
+					if (self.expect_literal(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -633,18 +647,18 @@ const Program = struct {
 					if (inst.list.items.len != 2){
 						return null;
 					}
-					if (self.expect_alu_arg(normalized, inst.list.items[1])){
+					if (self.expect_alu_arg(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
 					}
 					return null;
 				},
-				.PSH, POP => {
+				.PSH, .POP => {
 					if (inst.list.items.len != 2){
 						return null;
 					}
-					if (self.expect_register(normalized, inst.list.items[1])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -655,6 +669,9 @@ const Program = struct {
 					normalized.append(inst)
 						catch unreachable;
 					continue;
+				},
+				else => {
+					return null;
 				}
 			}
 		}
@@ -668,23 +685,33 @@ const Program = struct {
 		if (expr.list.items.len == 0){
 			return null;
 		}
-		const normalized = Buffer(*Expr).init(self.mem.*);
-		if (self.normalize(normalized, expr, true) == null){
+		var normalized = Buffer(*Expr).init(self.mem.*);
+		if (self.normalize(&normalized, expr, true) == null){
 			return null;
 		}
-		const parsed = Buffer(IRNode).init(self.mem.*);
+		if (debug){
+			std.debug.print("Normalized:\n", .{});
+			for (normalized.items) |e| {
+				show_expr(e, 1);
+			}
+			std.debug.print("\n", .{});
+		}
+		//const parsed = Buffer(IRNode).init(self.mem.*);
 		// TODO parse into ir.Instruction representation
 		// TODO reify lists into static buffers to be written into the vm memory later
 		// self normalize, then deal with register coloring, then deal with labels
-		// int is special too
+		// int is special too, save registers and flatten ?
+		// then parse properly
+		const parsed = Buffer(ir.Instruction).init(self.mem.*);
+		return parsed;
 	}
 
-	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
+	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
 		return (self.expect_register(normalized, expr) or self.expect_literal(normalized, expr));
 	}
 
-	pub fn expect_register(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
-		return self.expect_token(normlaized, expr);
+	pub fn expect_register(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
+		return self.expect_token(normalized, expr);
 	}
 
 	pub fn expect_dregister(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
@@ -694,12 +721,19 @@ const Program = struct {
 		if (expr.list.items.len != 2){
 			return false;
 		}
-		return self.expect_register(normalized, expr.list.items[1]);
+		if (self.expect_register(normalized, &expr.list.items[1])){
+			return true;
+		}
+		if (self.normalize(normalized, expr.list.items[1], false)) |norm| {
+			expr.list.items[1] = norm;
+			return self.expect_register(normalized, &expr.list.items[1]);
+		}
+		return false;
 	}
 
-	pub fn expect_literal(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
-		if (expr.* == .list){
-			if (self.normalize(normalized, expr)) |norm| {
+	pub fn expect_literal(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
+		if (expr.*.* == .list){
+			if (self.normalize(normalized, expr.*, false)) |norm| {
 				if (norm.* == .list){
 					return false;
 				}
@@ -710,15 +744,15 @@ const Program = struct {
 			}
 			return false;
 		}
-		if (expr.atom.tag == .NUM){
+		if (expr.*.atom.tag == .NUM){
 			return true;
 		}//TODO num tokenizing
 		return false;
 	}
 
-	pub fn expect_token(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
-		if (expr.* == .list){
-			if (self.normalize(normalized, expr)) |norm| {
+	pub fn expect_token(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
+		if (expr.*.* == .list){
+			if (self.normalize(normalized, expr.*, false)) |norm| {
 				if (norm.* == .list){
 					return false;
 				}
@@ -730,10 +764,12 @@ const Program = struct {
 		return true;
 	}
 
-	pub fn evaluate(self: *Program, repr: []ir.instruction) *Expr {
+	pub fn evaluate(self: *Program, repr: []ir.Instruction) *Expr {
 		var error_buffer = Buffer(ir.Error).init(self.mem.*);
-		const bytecode = assemble_bytecode(self.mem, repr, &error_buffer) catch unreachable;
+		_ = ir.assemble_bytecode(self.mem, repr, &error_buffer) catch unreachable;
+		//TODO run in context
 		//TODO lift out reifeid list structure
+		return self.mem.create(Expr) catch unreachable;//TODO placeholder
 	}
 
 	pub fn descend(self: *Program, expr: *Expr, err: *Buffer(Error)) ParseError!*Expr {
@@ -774,99 +810,102 @@ const Program = struct {
 						}
 					}
 					expr.list.items[0] = try self.descend(expr.list.items[0], err);
+					break;
 				}
-				if (expr.list.items[0].atom.tag == .BIND){
-					const bind = try expr_to_bind(self.mem, expr, err);
-					if (bind.expr.* == .list){
-						if (bind.expr.list.items[0].* == .atom){
-							if (bind.expr.list.items[0].atom.tag == .COMP){
-								self.binds.put(bind.name.text, bind)
-									catch unreachable;
-								const nop = self.mem.create(Expr)
-									catch unreachable;
-								nop.* = Expr{
-									.list = Buffer(*Expr).init(self.mem.*)
-								};
-								return nop;
+				if (expr.list.items[0].* == .atom){
+					if (expr.list.items[0].atom.tag == .BIND){
+						const bind = try expr_to_bind(self.mem, expr, err);
+						if (bind.expr.* == .list){
+							if (bind.expr.list.items[0].* == .atom){
+								if (bind.expr.list.items[0].atom.tag == .COMP){
+									self.binds.put(bind.name.text, bind)
+										catch unreachable;
+									const nop = self.mem.create(Expr)
+										catch unreachable;
+									nop.* = Expr{
+										.list = Buffer(*Expr).init(self.mem.*)
+									};
+									return nop;
+								}
 							}
 						}
+						expr.list.items[3] = try self.descend(expr.list.items[3], err);
+						return expr;
 					}
-					expr.list.items[3] = try self.descend(expr.list.items[3], err);
-					return expr;
-				}
-				if (expr.list.items[0].atom.tag == .COMP){
-					if (expr.list.items[1].* == .atom){
-						return expr.list.items[1];
+					if (expr.list.items[0].atom.tag == .COMP){
+						if (expr.list.items[1].* == .atom){
+							return expr.list.items[1];
+						}
+						return try self.compute(expr.list.items[1].list, err);
 					}
-					return try self.compute(expr.list.items[1].list, err);
-				}
-				if (expr.list.items[0].atom.tag == .UID){
-					if (expr.list.items.len != 3){
-						err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 3 arguments for uid block\n", .{}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					}
-					if (expr.list.items[1].* != .list){
-						err.append(set_error(self.mem, expr.list.items[1].atom.pos, "Expected list of aliases for uid block, found atom {s}\n", .{expr.list.items[1].atom.text}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					}
-					if (expr.list.items[2].* != .list){
-						err.append(set_error(self.mem, expr.list.items[2].atom.pos, "Expected list for aliasing, found atom {s}\n", .{expr.list.items[2].atom.text}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					}
-					var aliasmap = Map(*Expr).init(self.mem.*);
-					for (expr.list.items[1].list.items) |alias| {
-						if (alias.* != .atom){
-							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected alias atom, found list\n", .{}))
+					if (expr.list.items[0].atom.tag == .UID){
+						if (expr.list.items.len != 3){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 3 arguments for uid block\n", .{}))
 								catch unreachable;
 							return ParseError.UnexpectedToken;
 						}
-						const loc = self.mem.create(Expr)
-							catch unreachable;
-						loc.* = Expr{
-							.atom = Token {
-								.pos = alias.atom.pos,
-								.text = uid(self.mem),
-								.tag = .IDEN
+						if (expr.list.items[1].* != .list){
+							err.append(set_error(self.mem, expr.list.items[1].atom.pos, "Expected list of aliases for uid block, found atom {s}\n", .{expr.list.items[1].atom.text}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						if (expr.list.items[2].* != .list){
+							err.append(set_error(self.mem, expr.list.items[2].atom.pos, "Expected list for aliasing, found atom {s}\n", .{expr.list.items[2].atom.text}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						var aliasmap = Map(*Expr).init(self.mem.*);
+						for (expr.list.items[1].list.items) |alias| {
+							if (alias.* != .atom){
+								err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected alias atom, found list\n", .{}))
+									catch unreachable;
+								return ParseError.UnexpectedToken;
 							}
+							const loc = self.mem.create(Expr)
+								catch unreachable;
+							loc.* = Expr{
+								.atom = Token {
+									.pos = alias.atom.pos,
+									.text = uid(self.mem),
+									.tag = .IDEN
+								}
+							};
+							aliasmap.put(alias.atom.text, loc)
+								catch unreachable;
+						}
+						const replace = distribute_args(aliasmap, expr.list.items[2]);
+						return try self.descend(replace, err);
+					}
+					if (expr.list.items[0].atom.tag == .USE){
+						if (expr.list.items.len != 2){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected name of file for module code import, found {} arguments instead\n", .{expr.list.items.len}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						const filename = expr.list.items[1];
+						if (filename.* != .atom){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected name of file for module, found list instead\n", .{}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						if (filename.atom.tag != .STR){
+							err.append(set_error(self.mem, filename.atom.pos, "Expected name of file for module, found {s} instead\n", .{filename.atom.text}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						const extracted = filename.atom.text[1..filename.atom.text.len-1];
+						const contents = get_contents(self.mem, extracted) catch {
+							err.append(set_error(self.mem, filename.atom.pos, "Couldnt open file {s}\n", .{filename.atom.text}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
 						};
-						aliasmap.put(alias.atom.text, loc)
-							catch unreachable;
+						const tokens = tokenize(self.mem, contents, err);
+						if (err.items.len != 0){
+							return ParseError.UnexpectedToken;
+						}
+						const raw_expressions = try parse_program(self.mem, tokens.items, err);
+						return try self.compute(raw_expressions, err);
 					}
-					const replace = distribute_args(aliasmap, expr.list.items[2]);
-					return try self.descend(replace, err);
-				}
-				if (expr.list.items[0].atom.tag == .USE){
-					if (expr.list.items.len != 2){
-						err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected name of file for module code import, found {} arguments instead\n", .{expr.list.items.len}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					}
-					const filename = expr.list.items[1];
-					if (filename.* != .atom){
-						err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected name of file for module, found list instead\n", .{}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					}
-					if (filename.atom.tag != .STR){
-						err.append(set_error(self.mem, filename.atom.pos, "Expected name of file for module, found {s} instead\n", .{filename.atom.text}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					}
-					const extracted = filename.atom.text[1..filename.atom.text.len-1];
-					const contents = get_contents(self.mem, extracted) catch {
-						err.append(set_error(self.mem, filename.atom.pos, "Couldnt open file {s}\n", .{filename.atom.text}))
-							catch unreachable;
-						return ParseError.UnexpectedToken;
-					};
-					const tokens = tokenize(self.mem, contents, err);
-					if (err.items.len != 0){
-						return ParseError.UnexpectedToken;
-					}
-					const raw_expressions = try parse_program(self.mem, tokens.items, err);
-					return try self.compute(raw_expressions, err);
 				}
 				var i: u64 = 1;
 				while (i < expr.list.items.len){
@@ -894,6 +933,9 @@ const Program = struct {
 					}
 					expr.list.items[i] = try self.descend(expr.list.items[i], err);
 					i += 1;
+				}
+				if (expr.list.items[0].* == .list){
+					return expr;
 				}
 				if (self.binds.get(expr.list.items[0].atom.text)) |bind| {
 					switch (bind.expr.*){
