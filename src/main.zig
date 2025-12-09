@@ -737,8 +737,7 @@ const Program = struct {
 		}
 		//const parsed = Buffer(IRNode).init(self.mem.*);
 		// TODO parse into ir.Instruction representation
-		// TODO reify lists into static buffers to be written into the vm memory later
-		// self normalize, then deal with register coloring, then deal with labels
+		// deal with register coloring, then deal with labels
 		// int is special too, save registers and flatten ?
 		// then parse properly
 		const parsed = Buffer(ir.Instruction).init(self.mem.*);
@@ -1060,11 +1059,7 @@ const Reif = struct {
 		}
 		self.static.append(buffer)
 			catch unreachable;
-		return ptr;
-	}
-
-	pub fn normalize_ptrs() void {
-		//TODO
+		return (ptr*8) | reif_ptr;
 	}
 };
 
