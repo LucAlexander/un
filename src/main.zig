@@ -119,12 +119,17 @@ pub fn show_expr(expr: *Expr, depth: u64) void {
 		},
 		.list => {
 			for (expr.list.items) |sub| {
-				std.debug.print("\n", .{});
-				show_expr(sub, depth+1);
+				if (sub.* == .list){
+					std.debug.print("\n", .{});
+					show_expr(sub, depth+1);
+				}
+				else{
+					show_token(sub.atom);
+				}
 			}
 		}
 	}
-	std.debug.print(")", .{});
+	std.debug.print(") ", .{});
 }
 
 pub fn show_error(text: []u8, err: Error) void {
@@ -687,6 +692,9 @@ const Program = struct {
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		if (self.normalize(&normalized, expr, true) == null){
+			if (debug){
+				std.debug.print("Failed normalization parse\n", .{});
+			}
 			return null;
 		}
 		if (debug){
@@ -813,6 +821,22 @@ const Program = struct {
 					break;
 				}
 				if (expr.list.items[0].* == .atom){
+					if (expr.list.items[0].atom.tag == .FLAT){
+						if (expr.list.items.len != 2){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 2 arguments for flatten, found {}\n", .{expr.list.items.len}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						expr.list.items[1] = try self.descend(expr.list.items[1], err);
+						if (expr.list.items[1].* == .list){
+							if (expr.list.items[1].list.items.len != 1){
+								err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 1 arguments for flatten list, found {}\n", .{expr.list.items[1].list.items.len}))
+									catch unreachable;
+								return ParseError.UnexpectedToken;
+							}
+						}
+						return try self.descend(expr.list.items[1].list.items[0], err);
+					}
 					if (expr.list.items[0].atom.tag == .BIND){
 						const bind = try expr_to_bind(self.mem, expr, err);
 						if (bind.expr.* == .list){
@@ -904,7 +928,12 @@ const Program = struct {
 							return ParseError.UnexpectedToken;
 						}
 						const raw_expressions = try parse_program(self.mem, tokens.items, err);
-						return try self.compute(raw_expressions, err);
+						const loc = self.mem.create(Expr)
+							catch unreachable;
+						loc.* = Expr{
+							.list = raw_expressions
+						};
+						return loc;
 					}
 				}
 				var i: u64 = 1;
@@ -981,7 +1010,7 @@ pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *
 	std.debug.assert(expr.* == .list);
 	std.debug.assert(expr.list.items[0].* == .atom);
 	std.debug.assert(bind.args.* == .list);
-	std.debug.assert(expr.list.items.len-1 == bind.args.list.items.len);
+	std.debug.assert(expr.list.items.len-1 == bind.args.list.items.len); // TODO what
 	var argmap = Map(*Expr).init(mem.*);
 	for (bind.args.list.items, expr.list.items[1..]) |argname, application| {
 		if (argname.* == .list){
