@@ -580,7 +580,20 @@ const Program = struct {
 						}
 						if (inst.list.items[2].* == .list){
 							const adr = reif.add_relation(inst.list.items[2]);
-							//TODO reify, replace with address
+							const buf = self.mem.alloc(u8, 20)
+								catch unreachable;
+							const s = std.fmt.bufPrint(buf, "{d}", .{adr})
+								catch unreachable;
+							const loc = self.mem.create(Expr)
+								catch unreachable;
+							loc.* = Expr{
+								.atom = Token{
+									.pos = 0,
+									.text = s,
+									.tag = .NUM
+								}
+							};
+							inst.list.items[2] = loc;
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -604,7 +617,20 @@ const Program = struct {
 						}
 						if (inst.list.items[2].* == .list){
 							const adr = reif.add_relation(inst.list.items[2]);
-							//TODO replace with address
+							const buf = self.mem.alloc(u8, 20)
+								catch unreachable;
+							const s = std.fmt.bufPrint(buf, "{d}", .{adr})
+								catch unreachable;
+							const loc = self.mem.create(Expr)
+								catch unreachable;
+							loc.* = Expr{
+								.atom = Token{
+									.pos = 0,
+									.text = s,
+									.tag = .NUM
+								}
+							};
+							inst.list.items[2] = loc;
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -666,7 +692,7 @@ const Program = struct {
 					if (inst.list.items.len != 2){
 						return null;
 					}
-					if (self.expect_register(normalized, &inst.list.items[1])){
+					if (self.expect_register(normalized, reif, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -694,7 +720,7 @@ const Program = struct {
 			return null;
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
-		var reif = Reif.init(mem);
+		var reif = Reif.init(self.mem);
 		if (self.normalize(&normalized, &reif, expr, true) == null){
 			if (debug){
 				std.debug.print("Failed normalization parse\n", .{});
@@ -1001,7 +1027,7 @@ const Reif = struct {
 	reverse: std.AutoHashMap(u64, *Expr),
 	forward: Map(u64),
 	static: Buffer([]u64),
-	current_symbol: u64
+	current_symbol: u64,
 
 	pub fn init(mem: *const std.mem.Allocator) Reif {
 		return Reif {
@@ -1024,7 +1050,7 @@ const Reif = struct {
 				catch unreachable;
 			return sym;
 		}
-		const ptr = self.static.len;
+		const ptr = self.static.items.len;
 		var buffer = self.mem.alloc(u64, expr.list.items.len)
 			catch unreachable;
 		var i:u64 = 0;
@@ -1037,7 +1063,9 @@ const Reif = struct {
 		return ptr;
 	}
 
-	pub fn normalize_ptr
+	pub fn normalize_ptrs() void {
+		//TODO
+	}
 };
 
 pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *Buffer(Error)) ParseError!*Expr {
