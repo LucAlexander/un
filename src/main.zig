@@ -37,7 +37,11 @@ const TOKEN = enum(u64) {
 	CALL, RET,
 	PSH, POP,
 	INT,
-	AT
+	AT,
+	REG0,
+	REG1,
+	REG2,
+	REG3
 };
 
 const Token = struct {
@@ -735,6 +739,12 @@ const Program = struct {
 			}
 			std.debug.print("\n", .{});
 		}
+		//TODO im leaving this for the next mania:
+		//NOTE everything is currently non checked s expressions, it passed the validity check in normalization, but we dont discrimintate between NUM and IDEN
+		//you need to do register coloring next, registers reset when thery are redeclared in order. track stack mutations
+		self.color(&normalized);
+		// how do we track stack mutations of dynamic values?
+		// disallow mutations and movs to the stack and frame pointer, allow mutation only through push/pop/call/prospective alloca
 		//const parsed = Buffer(IRNode).init(self.mem.*);
 		// TODO parse into ir.Instruction representation
 		// deal with register coloring, then deal with labels
@@ -742,6 +752,104 @@ const Program = struct {
 		// then parse properly
 		const parsed = Buffer(ir.Instruction).init(self.mem.*);
 		return parsed;
+	}
+
+	pub fn color_register(expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(bool)) void {
+		if (expr.* != .atom){
+			return;
+		}
+		if (regmap.get(expr.atom.text)) |old| {
+			if (vacated.get(expr.atom.text)) |_| {
+				
+			}
+			for (q.items, 0..) |reg, i| {
+				if (old == reg){
+					const item = q.orderedRemove(i);
+					q.append(item)
+						catch unreachable;
+					break;
+				}
+			}
+			switch (old){
+				ir.Register.R0 => {
+					expr.atom.tag = .REG0;
+				}
+				ir.Register.R1 => {
+					expr.atom.tag = .REG1;
+				}
+				ir.Register.R2 => {
+					expr.atom.tag = .REG2;
+				}
+				ir.Register.R3 => {
+					expr.atom.tag = .REG3;
+				}
+			}
+		}
+	}
+
+	pub fn color(self: *Program, normalized: *Buffer(*Expr)) void {
+		var regmap = Map(ir.Regsiter).init(self.mem.*);
+		var q = Buffer(ir.Register).init(self.mem.*);
+		q.append(ir.Register.R0) catch unreachable;
+		q.append(ir.Register.R1) catch unreachable;
+		q.append(ir.Register.R2) catch unreachable;
+		q.append(ir.Register.R3) catch unreachable;
+		var vacated = Map(bool).init(self.mem.*);
+		var stack_position: u64 = 0;
+		var i: u64 = 0;
+		while (i<normalized.items.len) : (i += 1) {
+			const expr = normalized.items[i];
+			std.debug.assert(expr.list.items[0].* == .atom);
+			switch(expr.list.items[0].atom.tag){
+				.REG => {
+					const register = q.orderedRemove(0);
+					q.append(register)
+						catch unreachable;
+					var it = regmap.iterator();
+					while (it.next()) |elem| {
+						if (std.mem.eql(u8, elem.key_ptr.*, expr.list.items[1].atom.text)){
+							vacated.put(expr.list.items[1].atom.text, true)
+								catch unreachable;
+						}
+					}
+					regmap.put(expr.list.items[1].atom.text, register)
+						catch unreachable;
+				},
+				.LABEL => {
+					continue;
+				},
+				.MOV => {
+					color_register(expr.list.items[1], regmap, &q, &vacated);
+					color_register(expr.list.items[2], regmap, &q, &vacated);
+				},
+				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
+					color_register(expr.list.items[1], regmap, &q, &vacated);
+					color_register(expr.list.items[2], regmap, &q, &vacated);
+					color_register(expr.list.items[3], regmap, &q, &vacated);
+				},
+				.NOT, .COM, .CMP => {
+					color_register(expr.list.items[1], regmap, &q, &vacated);
+					color_register(expr.list.items[2], regmap, &q, &vacated);
+				},
+				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .CALL, => {
+					continue;
+				},
+				.RET => {
+					color_register(expr.list.items[1], regmap, &q, &vacated);
+				},
+				.PSH => {
+					stack_position += 8;
+					color_register(expr.list.items[1], regmap, &q, &vacated);
+				},
+				.POP => {
+					stack_position -= 8;
+					color_register(expr.list.items[1], regmap, &q, &vacated);
+				},
+				.INT => {
+					continue;
+				}
+			}
+		}
 	}
 
 	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: **Expr) bool {
