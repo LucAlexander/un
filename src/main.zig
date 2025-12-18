@@ -780,9 +780,6 @@ const Program = struct {
 				ir.Register.R2 => {
 					expr.atom.tag = .REG2;
 				}
-				ir.Register.R3 => {
-					expr.atom.tag = .REG3;
-				}
 			}
 		}
 	}
@@ -793,8 +790,7 @@ const Program = struct {
 		q.append(ir.Register.R0) catch unreachable;
 		q.append(ir.Register.R1) catch unreachable;
 		q.append(ir.Register.R2) catch unreachable;
-		q.append(ir.Register.R3) catch unreachable;
-		var vacated = Map(bool).init(self.mem.*);
+		var vacated = Map(u64).init(self.mem.*);
 		var stack_position: u64 = 0;
 		var i: u64 = 0;
 		while (i<normalized.items.len) : (i += 1) {
@@ -807,9 +803,74 @@ const Program = struct {
 						catch unreachable;
 					var it = regmap.iterator();
 					while (it.next()) |elem| {
-						if (std.mem.eql(u8, elem.key_ptr.*, expr.list.items[1].atom.text)){
-							vacated.put(expr.list.items[1].atom.text, true)
+						if (elem.value_ptr.* == register){
+							vacated.put(it.key_ptr.*, stack_position)
 								catch unreachable;
+							var loc = self.mem.create(Expr)
+								catch unreachable;
+							loc.* = Expr{
+								.list = Buffer(*Expr).init(self.mem.*)
+							};
+							var left = self.mem.create(Expr)
+								catch unreachable;
+							left.* = Expr{
+								.atom = Token{
+									.text = "psh",
+									.pos = 0,
+									.tag = .PSH
+								}
+							};
+							loc.list.append(left)
+								catch unreachable;
+							switch (register) {
+								ir.Register.R0 => {
+									var right = self.mem.create(Expr)
+										catch unreachable;
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG0
+										}
+									};
+									loc.list.append(right)
+										catch unreachable;					
+								},
+								ir.Register.R1 => {
+									var right = self.mem.create(Expr)
+										catch unreachable;
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG1
+										}
+									};
+									loc.list.append(right)
+										catch unreachable;					
+								},
+								ir.Register.R2 => {
+									var right = self.mem.create(Expr)
+										catch unreachable;
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG2
+										}
+									};
+									loc.list.append(right)
+										catch unreachable;					
+								},
+								else => {
+									unreachable
+								}
+							}
+							normalized.insert(i, loc)
+								catch unreachable;
+							stack_position += 8;
+							i += 1;
+							break;
 						}
 					}
 					regmap.put(expr.list.items[1].atom.text, register)
