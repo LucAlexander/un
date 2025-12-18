@@ -11,7 +11,7 @@ const Config = struct {
 	mem: std.mem.Allocator
 };
 
-const Register = enum(u64) {
+pub const Register = enum(u64) {
 	R0=0,
 	R1,
 	R2,

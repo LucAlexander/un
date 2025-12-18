@@ -111,6 +111,21 @@ pub fn get_contents(mem: *const std.mem.Allocator, filename: []u8) ![]u8 {
 
 pub fn show_token(token: Token) void {
 	std.debug.print("{s} ", .{token.text});
+	if (token.tag == .REG0){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG1){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG2){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG3){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .FPTR){
+		std.debug.print("[{}] ", .{token.tag});
+	}
 }
 
 pub fn show_expr(expr: *Expr, depth: u64) void {
@@ -744,6 +759,14 @@ const Program = struct {
 		//NOTE everything is currently non checked s expressions, it passed the validity check in normalization, but we dont discrimintate between NUM and IDEN
 		//you need to do register coloring next, registers reset when thery are redeclared in order. track stack mutations
 		self.color(&normalized);
+		if (debug){
+			std.debug.print("Colored:\n", .{});
+			for (normalized.items) |e| {
+				show_expr(e, 1);
+				std.debug.print("\n", .{});
+			}
+			std.debug.print("\n", .{});
+		}
 		// how do we track stack mutations of dynamic values?
 		// disallow mutations and movs to the stack and frame pointer, allow mutation only through push/pop/call/prospective alloca
 		//const parsed = Buffer(IRNode).init(self.mem.*);
@@ -755,7 +778,7 @@ const Program = struct {
 		return parsed;
 	}
 
-	pub fn color_register(self: *Program, normalized: *Buffer(*Expr), i: u64, expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(bool)) void {
+	pub fn color_register(self: *Program, normalized: *Buffer(*Expr), i: *u64, expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(u64)) void {
 		if (expr.* != .atom){
 			return;
 		}
@@ -770,7 +793,7 @@ const Program = struct {
 					catch unreachable;
 				op.* = Expr{
 					.atom = Token{
-						.text = "mov",
+						.text = self.mem.dupe(u8, "mov") catch unreachable,
 						.pos = 0,
 						.tag = .MOV
 					}
@@ -779,7 +802,7 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = "r3",
+						.text = self.mem.dupe(u8, "r3") catch unreachable,
 						.pos = 0,
 						.tag = .REG3
 					}
@@ -788,7 +811,7 @@ const Program = struct {
 					catch unreachable;
 				src.* = Expr{
 					.atom = Token{
-						.text = "fp"
+						.text = self.mem.dupe(u8, "fp") catch unreachable,
 						.pos = 0,
 						.tag = .FPTR
 					}
@@ -805,7 +828,7 @@ const Program = struct {
 					catch unreachable;
 				op.* = Expr{
 					.atom = Token{
-						.text = "sub",
+						.text = self.mem.dupe(u8, "sub") catch unreachable,
 						.pos = 0,
 						.tag = .MOV
 					}
@@ -814,7 +837,7 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = "fp",
+						.text = self.mem.dupe(u8, "fp") catch unreachable,
 						.pos = 0,
 						.tag = .FPTR
 					}
@@ -823,10 +846,11 @@ const Program = struct {
 					catch unreachable;
 				const buffer = self.mem.alloc(u8, 20)
 					catch unreachable;
-				var slice = std.fmt.bufPrint(buffer, "{}", .{offset});
+				const slice = std.fmt.bufPrint(buffer, "{}", .{offset})
+					catch unreachable;
 				src.* = Expr{
 					.atom = Token{
-						.text = slice
+						.text = slice,
 						.pos = 0,
 						.tag = .NUM
 					}
@@ -845,7 +869,7 @@ const Program = struct {
 					catch unreachable;
 				op.* = Expr{
 					.atom = Token{
-						.text = "mov",
+						.text = self.mem.dupe(u8, "mov") catch unreachable,
 						.pos = 0,
 						.tag = .MOV
 					}
@@ -854,7 +878,7 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = "r3",
+						.text = self.mem.dupe(u8, "r3") catch unreachable,
 						.pos = 0,
 						.tag = .REG3
 					}
@@ -864,18 +888,18 @@ const Program = struct {
 				src.* = Expr{
 					.list = Buffer(*Expr).init(self.mem.*)
 				};
-				var at = self.mem.create(Expr)
+				const at = self.mem.create(Expr)
 					catch unreachable;
 				at.* = Expr{
 					.atom = Token{
-						.text = "at",
+						.text = self.mem.dupe(u8, "at") catch unreachable,
 						.pos = 0,
 						.tag = .AT
 					}
 				};
-				src.append(at)
+				src.list.append(at)
 					catch unreachable;
-				src.append(dest)
+				src.list.append(dest)
 					catch unreachable;
 				loc.list.append(op)
 					catch unreachable;
@@ -893,9 +917,9 @@ const Program = struct {
 				i.* += 3;
 				return;
 			}
-			for (q.items, 0..) |reg, i| {
+			for (q.items, 0..) |reg, k| {
 				if (old == reg){
-					const item = q.orderedRemove(i);
+					const item = q.orderedRemove(k);
 					q.append(item)
 						catch unreachable;
 					break;
@@ -904,19 +928,22 @@ const Program = struct {
 			switch (old){
 				ir.Register.R0 => {
 					expr.atom.tag = .REG0;
-				}
+				},
 				ir.Register.R1 => {
 					expr.atom.tag = .REG1;
-				}
+				},
 				ir.Register.R2 => {
 					expr.atom.tag = .REG2;
+				},
+				else => {
+					unreachable;
 				}
 			}
 		}
 	}
 
 	pub fn color(self: *Program, normalized: *Buffer(*Expr)) void {
-		var regmap = Map(ir.Regsiter).init(self.mem.*);
+		var regmap = Map(ir.Register).init(self.mem.*);
 		var q = Buffer(ir.Register).init(self.mem.*);
 		q.append(ir.Register.R0) catch unreachable;
 		q.append(ir.Register.R1) catch unreachable;
@@ -933,23 +960,23 @@ const Program = struct {
 					q.append(register)
 						catch unreachable;
 					if (vacated.get(expr.list.items[1].atom.text)) |_| {
-						vacated.remove(expr.list.items[1].atom.text);
+						_ = vacated.remove(expr.list.items[1].atom.text);
 					}
 					var it = regmap.iterator();
 					while (it.next()) |elem| {
 						if (elem.value_ptr.* == register){
-							vacated.put(it.key_ptr.*, stack_position)
+							vacated.put(elem.key_ptr.*, stack_position)
 								catch unreachable;
 							var loc = self.mem.create(Expr)
 								catch unreachable;
 							loc.* = Expr{
 								.list = Buffer(*Expr).init(self.mem.*)
 							};
-							var left = self.mem.create(Expr)
+							const left = self.mem.create(Expr)
 								catch unreachable;
 							left.* = Expr{
 								.atom = Token{
-									.text = "psh",
+									.text = self.mem.dupe(u8, "psh") catch unreachable,
 									.pos = 0,
 									.tag = .PSH
 								}
@@ -958,7 +985,7 @@ const Program = struct {
 								catch unreachable;
 							switch (register) {
 								ir.Register.R0 => {
-									var right = self.mem.create(Expr)
+									const right = self.mem.create(Expr)
 										catch unreachable;
 									right.* = Expr{
 										.atom = Token{
@@ -971,7 +998,7 @@ const Program = struct {
 										catch unreachable;					
 								},
 								ir.Register.R1 => {
-									var right = self.mem.create(Expr)
+									const right = self.mem.create(Expr)
 										catch unreachable;
 									right.* = Expr{
 										.atom = Token{
@@ -984,7 +1011,7 @@ const Program = struct {
 										catch unreachable;					
 								},
 								ir.Register.R2 => {
-									var right = self.mem.create(Expr)
+									const right = self.mem.create(Expr)
 										catch unreachable;
 									right.* = Expr{
 										.atom = Token{
@@ -997,7 +1024,7 @@ const Program = struct {
 										catch unreachable;					
 								},
 								else => {
-									unreachable
+									unreachable;
 								}
 							}
 							normalized.insert(i, loc)
@@ -1014,34 +1041,37 @@ const Program = struct {
 					continue;
 				},
 				.MOV => {
-					self.color_register(normalized, &i, expr.list.items[1], regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[2], regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-					self.color_register(normalized, &i, expr.list.items[1], regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[2], regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[3], regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[3], &regmap, &q, &vacated);
 				},
 				.NOT, .COM, .CMP => {
-					self.color_register(normalized, &i, expr.list.items[1], regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[2], regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
 				},
 				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .CALL, => {
 					continue;
 				},
 				.RET => {
-					self.color_register(normalized, &i, expr.list.items[1], regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 				},
 				.PSH => {
 					stack_position += 8;
-					self.color_register(normalized, &i, expr.list.items[1], regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 				},
 				.POP => {
 					stack_position -= 8;
-					self.color_register(normalized, &i, expr.list.items[1], regmap, &q, &vacated);
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 				},
 				.INT => {
 					continue;
+				},
+				else => {
+					unreachable;
 				}
 			}
 		}
