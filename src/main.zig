@@ -783,13 +783,158 @@ const Program = struct {
 			}
 			std.debug.print("\n", .{});
 		}
-
-		// disallow mutations and movs to the stack and frame pointer, allow mutation only through push/pop/call/prospective alloca
-		//const parsed = Buffer(IRNode).init(self.mem.*);
-		// TODO parse into ir.Instruction representation
-		// deal with labels
-		// then parse properly
-		const parsed = Buffer(ir.Instruction).init(self.mem.*);
+		var parsed = Buffer(ir.Instruction).init(self.mem.*);
+		var i: u64 = 0;
+		while (i < normalized.items.len){
+			const expr = normalized.items[i];
+			switch (expr.list.items[0].atom.tag){
+				.MOV => {
+					if (is_register(expr.list.items[1])) |dest| {
+						if (is_regsiter(expr.list.items[2])) |src| {
+							const inst = Instruction{
+								.tag = ir.TOKEN.MOV,
+								.data = .{
+									.move = .{
+										.dest = LArg{
+											.register = dest
+										},
+										.src = RArg{
+											.register = src
+										}
+									}
+								}
+							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (is_dregsiter(expr.list.items[2])) |src| {
+							const inst = Instruction{
+								.tag = ir.TOKEN.MOV,
+								.data = .{
+									.move = .{
+										.dest = LArg{
+											.register = dest
+										},
+										.src = RArg{
+											.dregister = src
+										}
+									}
+								}
+							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
+						}
+						else if (is_literal(expr.list.items[2])) |src| {
+							const inst = Instruction{
+								.tag = ir.TOKEN.MOV,
+								.data = .{
+									.move = .{
+										.dest = LArg{
+											.register = dest
+										},
+										.src = RArg{
+											.literal = src
+										}
+									}
+								}
+							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
+						}
+					}
+					if (is_dregister(expr.list.items[1])) |dest| {
+						if (is_regsiter(expr.list.items[2])) |src| {
+							const inst = Instruction{
+								.tag = ir.TOKEN.MOV,
+								.data = .{
+									.move = .{
+										.dest = LArg{
+											.dregister = dest
+										},
+										.src = RArg{
+											.register = src
+										}
+									}
+								}
+							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
+						}
+						if (is_dregsiter(expr.list.items[2])) |src| {
+							const inst = Instruction{
+								.tag = ir.TOKEN.MOV,
+								.data = .{
+									.move = .{
+										.dest = LArg{
+											.dregister = dest
+										},
+										.src = RArg{
+											.dregister = src
+										}
+									}
+								}
+							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
+						}
+						else if (is_literal(expr.list.items[2])) |src| {
+							const inst = Instruction{
+								.tag = ir.TOKEN.MOV,
+								.data = .{
+									.move = .{
+										.dest = LArg{
+											.dregister = dest
+										},
+										.src = RArg{
+											.literal = src
+										}
+									}
+								}
+							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
+						}
+					}
+					return null;
+				},
+				.ADD,
+				.SUB,
+				.MUL,
+				.DIV,
+				.MOD,
+				.UADD,
+				.USUB,
+				.UMUL,
+				.UDIV,
+				.UMOD,
+				.SHR,
+				.SHL,
+				.AND,
+				.OR,
+				.XOR,
+				.NOT,
+				.COM,
+				.CMP,
+				.JMP,
+				.JEQ, 
+				.JNE, 
+				.JGT, 
+				.JGE, 
+				.JLT, 
+				.JLE,
+				.CALL,
+				.RET,
+				.PSH,
+				.POP,
+				.INT,
+			}
+		}
 		return parsed;
 	}
 
@@ -846,6 +991,10 @@ const Program = struct {
 					_ = normalized.orderedRemove(i);
 					i -= 1;
 				},
+				.REG => {
+					_ = normalized.orderedRemove(i);
+					i -= 1;
+				}
 				else => {
 					continue;
 				}
@@ -1769,6 +1918,35 @@ const Program = struct {
 		return expr;
 	}
 };
+
+pub fn is_register(expr: *Expr) ?ir.Register {
+	if (expr.* == .list){
+		return null;
+	}
+	if (expr.atom.tag == .REG0) return ir.Register.R0;
+	if (expr.atom.tag == .REG1) return ir.Register.R1;
+	if (expr.atom.tag == .REG2) return ir.Regsiter.R2;
+	if (expr.atom.tag == .REG3) return ir.Regsiter.R3;
+	if (expr.atom.tag == .FPTR) return ir.Regsiter.FP;
+	if (expr.atom.tag == .SPTR) return ir.Regsiter.SP;
+	return null;
+}
+
+pub fn is_dregister(expr: *Expr) ?ir.Regsiter {
+	if (expr.* == .atom){
+		return null;
+	}
+	if (expr.list.items[0].* == .atom){
+		if (expr.list.items[0].atom.tag == .AT){
+			return is_register(expr.list.items[1]);
+		}
+	}
+	return null;
+}
+
+pub fn is_literal(expr: *Expr) ?u16 {
+	//TODO
+}
 
 const LabelChain = union(enum){
 	waiting: Buffer(**Expr),
