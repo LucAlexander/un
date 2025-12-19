@@ -774,14 +774,87 @@ const Program = struct {
 			}
 			std.debug.print("\n", .{});
 		}
+		self.inscribe_labels(&normalized);
+		if (debug){
+			std.debug.print("Inscribed labels:\n", .{});
+			for(normalized.items) |e| {
+				show_expr(e, 1);
+				std.debug.print("\n", .{});
+			}
+			std.debug.print("\n", .{});
+		}
+
 		// disallow mutations and movs to the stack and frame pointer, allow mutation only through push/pop/call/prospective alloca
 		//const parsed = Buffer(IRNode).init(self.mem.*);
 		// TODO parse into ir.Instruction representation
-		// int is special too, save registers and flatten ?
 		// deal with labels
 		// then parse properly
 		const parsed = Buffer(ir.Instruction).init(self.mem.*);
 		return parsed;
+	}
+
+	pub fn inscribe_labels(self: *Program, normalized: *Buffer(*Expr)) void {
+		var i: u64 = 0;
+		var chainmap = Map(LabelChain).init(self.mem.*);
+		while (i < normalized.items.len) : (i += 1){
+			const expr = normalized.items[i];
+			switch (expr.list.items[0].atom.tag){
+				.JMP, .JEQ, .JNE, .JLE, .JGE, .JLT, .JGT, .CALL => {
+					if (chainmap.getPtr(expr.list.items[1].atom.text)) |link| {
+						if (link.* == .waiting){
+							link.waiting.append(&expr.list.items[1])
+								catch unreachable;
+						}
+						else if (link.* == .fulfilled){
+							expr.list.items[1] = link.fulfilled;
+						}
+					}
+					else{
+						var newchain = LabelChain{
+							.waiting = Buffer(**Expr).init(self.mem.*)
+						};
+						newchain.waiting.append(&expr.list.items[1])
+							catch unreachable;
+						chainmap.put(expr.list.items[1].atom.text, newchain)
+							catch unreachable;
+					}
+				},
+				.LABEL => {
+					const buf = self.mem.alloc(u8, 20)
+						catch unreachable;
+					const slice = std.fmt.bufPrint(buf, "{}", .{i})
+						catch unreachable;
+					const replacement = self.mem.create(Expr)
+						catch unreachable;
+					replacement.* = Expr{
+						.atom = Token{
+							.pos = 0,
+							.text = slice,
+							.tag = .NUM
+						}
+					};
+					if (chainmap.get(expr.list.items[1].atom.text)) |link| {
+						if (link == .waiting){
+							for (link.waiting.items) |entry| {
+								entry.* = replacement;
+							}
+						}
+					}
+					chainmap.put(expr.list.items[1].atom.text, LabelChain{
+						.fulfilled = replacement
+					}) catch unreachable;
+					_ = normalized.orderedRemove(i);
+					i -= 1;
+				},
+				else => {
+					continue;
+				}
+			}
+		}
+		var it = chainmap.iterator();
+		while (it.next()) |entry| {
+			std.debug.assert(entry.value_ptr.* == .fulfilled);
+		}
 	}
 
 	pub fn flatten_interrupts(self: *Program, normalized: *Buffer(*Expr)) void {
@@ -1695,6 +1768,11 @@ const Program = struct {
 		}
 		return expr;
 	}
+};
+
+const LabelChain = union(enum){
+	waiting: Buffer(**Expr),
+	fulfilled: *Expr
 };
 
 const reif_val = 0x00000000000000000;
