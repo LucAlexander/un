@@ -908,7 +908,7 @@ const Program = struct {
 						if (is_alu_arg(expr.list.items[2])) |left| {
 							if (is_alu_arg(expr.list.items[3])) |right| {
 								const inst = Instruction{
-									.tag = translate_tag(expr.list.items[0]),
+									.tag = translate_tag(expr.list.items[0].atom),
 									.data = .{
 										.alu_bin = .{
 											.dest = dest,
@@ -926,21 +926,123 @@ const Program = struct {
 					return null;
 				},
 				.NOT, .COM => {
+					if (is_register(expr.list.items[1])) |dest| {
+						if (is_alu_arg(expr.list.items[2])) |src| {
+							const inst = Instruction {
+								.tag = translate_tag(expr.list.items[0].atom),
+								.data = .{
+									.alu_un = .{
+										.dest = dest,
+										.src = src
+									}
+								}
+							};
+						}
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.CMP => {
+					if (is_register(expr.list.items[1])) |dest| {
+						if (is_alu_arg(expr.list.items[2])) |src| {
+							const inst = Instruction {
+								.tag = translate_tag(expr.list.items[0].atom),
+								.data = .{
+									.compare = .{
+										.dest = dest,
+										.src = src
+									}
+								}
+							};
+						}
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+
+				},
+				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE => {
+					if (is_literal(expr.list.items[1])) |lit| {
+						const inst = Instruction{
+							.tag = translate_tag(expr.list.items[0]),
+							.data = .{
+								.jump = lit
+							}
+						};
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.CALL => {
+					if (is_literal(expr.list.items[1])) |lit| {
+						const inst = Instruction{
+							.tag = translate_tag(expr.list.items[0]),
+							.data = .{
+								.call = lit
+							}
+						};
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.RET => {
+					if (is_alu_arg(expr.list.items[1])) |val| {
+						const inst = Instruction{
+							.tag = translate_tag(expr.list.items[0].atom),
+							.data = .{
+								.ret = val
+							}
+						};
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
 					return null;
 				}
-				.CMP,
-				.JMP,
-				.JEQ, 
-				.JNE, 
-				.JGT, 
-				.JGE, 
-				.JLT, 
-				.JLE,
-				.CALL,
-				.RET,
-				.PSH,
-				.POP,
-				.INT,
+				.PSH => {
+					if (is_register(expr.list.items[1])) |src| {
+						const inst = Instruction{
+							.tag = translate_tag(expr.list.items[0].atom),
+							.data = .{
+								.push = src
+							}
+						};
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.POP => {
+					if (is_register(expr.list.items[1])) |src| {
+						const inst = Instruction{
+							.tag = translate_tag(expr.list.items[0].atom),
+							.data = .{
+								.pop = src
+							}
+						};
+						parsed.append(inst)
+							catch unreachable;
+						continue;
+					}
+					return null;
+				},
+				.INT => {
+					parsed.append(Instruction{
+						.tag = ir.TOKEN.INT,
+						.data = .{
+							.interrupt = .{}
+						}
+					}) catch unreachable;
+					continue;
+				},
 			}
 		}
 		return parsed;
