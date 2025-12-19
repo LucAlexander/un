@@ -42,7 +42,8 @@ const TOKEN = enum(u64) {
 	REG1,
 	REG2,
 	REG3,
-	FPTR
+	FPTR,
+	SPTR
 };
 
 const Token = struct {
@@ -755,9 +756,6 @@ const Program = struct {
 			}
 			std.debug.print("\n", .{});
 		}
-		//TODO im leaving this for the next mania:
-		//NOTE everything is currently non checked s expressions, it passed the validity check in normalization, but we dont discrimintate between NUM and IDEN
-		//you need to do register coloring next, registers reset when thery are redeclared in order. track stack mutations
 		self.color(&normalized);
 		if (debug){
 			std.debug.print("Colored:\n", .{});
@@ -767,15 +765,298 @@ const Program = struct {
 			}
 			std.debug.print("\n", .{});
 		}
-		// how do we track stack mutations of dynamic values?
+		self.flatten_interrupts(&normalized);
 		// disallow mutations and movs to the stack and frame pointer, allow mutation only through push/pop/call/prospective alloca
 		//const parsed = Buffer(IRNode).init(self.mem.*);
 		// TODO parse into ir.Instruction representation
-		// deal with register coloring, then deal with labels
 		// int is special too, save registers and flatten ?
+		// deal with labels
 		// then parse properly
 		const parsed = Buffer(ir.Instruction).init(self.mem.*);
 		return parsed;
+	}
+
+	pub fn flatten_interrupts(self: *Program, normalized: *Buffer(*Expr)) void {
+		var i: u64 = 0;
+		while (i < normalized.items.len) : (i += 1) {
+			const expr = normalized.items[i];
+			std.debug.assert(expr.* == .list);
+			std.debug.assert(expr.list.items[0].* == .atom);
+			switch(expr.list.items[0].atom.tag){
+				.INT => {
+					std.debug.assert(expr.list.items.len < 5);
+					self.push_register(normalized, &i, .REG2);
+					self.push_register(normalized, &i, .REG1);
+					self.push_register(normalized, &i, .REG0);
+					switch (expr.list.items.len){
+						2 => {
+							self.move_argument_register(normalized, &i, .REG0, expr.list.items[1]);
+						},
+						3 => {
+							self.move_argument_register(normalized, &i, .REG0, expr.list.items[1]);
+							self.move_argument_register(normalized, &i, .REG1, expr.list.items[2]);
+						},
+						4 => {
+							self.move_argument_register(normalized, &i, .REG0, expr.list.items[1]);
+							self.move_argument_register(normalized, &i, .REG1, expr.list.items[2]);
+							self.move_argument_register(normalized, &i, .REG2, expr.list.items[3]);
+						},
+						else => {
+							unreachable;
+						}
+					}
+				},
+				else => {
+					continue;
+				}
+			}
+		}
+	}
+
+	pub fn move_argument_register(self: *Program, normalized: *Buffer(*Expr), i: *u64, register: TOKEN, source: *Expr) void {
+		if (source.* == .atom){
+			if (source.atom.tag == register){
+				return;
+			}
+			var loc = self.mem.create(Expr)
+				catch unreachable;
+			var op = self.mem.create(Expr)
+				catch unreachable;
+			op.* = Expr{
+				.atom = Token{
+					.text = self.mem.dupe(u8, "mov") catch unreachable,
+					.pos = 0,
+					.tag = .MOV
+				}
+			};
+			var dest = self.mem.create(Expr)
+				catch unreachable;
+			dest.* = Expr{
+				.atom = Token{
+					.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+					.pos = 0,
+					.tag = register
+				}
+			};
+			loc.list.append(op)
+				catch unreachable;
+			loc.list.append(dest)
+				catch unreachable;
+			loc.list.append(source)
+				catch unreachable;
+			normalized.insert(i.*, loc)
+				catch unreachable;
+			i.* += 1;
+			return;
+		}
+		if (source.* == .list){
+			std.debug.assert(source.list.items[0].* == .atom);
+			std.debug.assert(source.list.items[0].atom.tag == .AT);
+			std.debug.assert(source.list.items[1].* == .atom);
+			if ((source.list.items[1].atom.tag == register) or
+			  (source.list.items[1].atom.tag != .REG0 and
+			  source.list.items[1].atom.tag != .REG1 and
+			  source.list.items[1].atom.tag != .REG2)){
+				var loc = self.mem.create(Expr)
+					catch unreachable;
+				var op = self.mem.create(Expr)
+					catch unreachable;
+				op.* = Expr{
+					.atom = Token{
+						.text = self.mem.dupe(u8, "mov") catch unreachable,
+						.pos = 0,
+						.tag = .MOV
+					}
+				};
+				var dest = self.mem.create(Expr)
+					catch unreachable;
+				dest.* = Expr{
+					.atom = Token{
+						.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+						.pos = 0,
+						.tag = register
+					}
+				};
+				loc.list.append(op)
+					catch unreachable;
+				loc.list.append(dest)
+					catch unreachable;
+				loc.list.append(source)
+					catch unreachable;
+				normalized.insert(i.*, loc)
+					catch unreachable;
+				i.* += 1;
+				return;
+			}
+		}
+		var loc = self.mem.create(Expr)
+			catch unreachable;
+		var op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		var dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = register
+			}
+		};
+		var src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "sp") catch unreachable,
+				.pos = 0,
+				.tag = .SPTR
+			}
+		};
+		loc.list.append(op)
+			catch unreachable;
+		loc.list.append(dest)
+			catch unreachable;
+		loc.list.append(src)
+			catch unreachable;
+		normalized.insert(i.*, loc)
+			catch unreachable;
+		i.* += 1;
+		loc = self.mem.create(Expr)
+			catch unreachable;
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "add") catch unreachable,
+				.pos = 0,
+				.tag = .ADD
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = register
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		var text = self.mem.dupe(u8, "0")
+			catch unreachable;
+		if (register == .REG1){
+			text = self.mem.dupe(u8, "8")
+				catch unreachable;
+		}
+		else if (register == .REG2){
+			text = self.mem.dupe(u8, "16")
+				catch unreachable;
+		}
+		src.* = Expr{
+			.atom = Token{
+				.text = text,
+				.pos = 0,
+				.tag = .NUM
+			}
+		};
+		loc.list.append(op)
+			catch unreachable;
+		loc.list.append(dest)
+			catch unreachable;
+		loc.list.append(dest)
+			catch unreachable;
+		loc.list.append(src)
+			catch unreachable;
+		normalized.insert(i.*, loc)
+			catch unreachable;
+		i.* += 1;
+		loc = self.mem.create(Expr)
+			catch unreachable;
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = register
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const at = self.mem.create(Expr)
+			catch unreachable;
+		at.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "at") catch unreachable,
+				.pos = 0,
+				.tag = .AT
+			}
+		};
+		src.list.append(at)
+			catch unreachable;
+		src.list.append(dest)
+			catch unreachable;
+		loc.list.append(op)
+			catch unreachable;
+		loc.list.append(dest)
+			catch unreachable;
+		loc.list.append(src)
+			catch unreachable;
+		normalized.insert(i.*, loc)
+			catch unreachable;
+		i.* += 1;
+	}
+
+	pub fn push_register(self: Program, normalized: *Buffer(*Expr), i: *u64, register: TOKEN) void {
+		const push = self.mem.create(Expr)
+			catch unreachable;
+		push.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "psh") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		const src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = register
+			}
+		};
+		push.list.append(op)
+			catch unreachable;
+		push.list.append(src)
+			catch unreachable;
+		normalized.insert(i.*, push)
+			catch unreachable;
+		i.* += 1;
 	}
 
 	pub fn color_register(self: *Program, normalized: *Buffer(*Expr), i: *u64, expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(u64)) void {
