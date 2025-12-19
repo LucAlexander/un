@@ -3,7 +3,7 @@ const Buffer = std.ArrayList;
 
 const debug = true;
 
-const Config = struct {
+pub const Config = struct {
 	screen_width: u64,
 	screen_height: u64,
 	cores: u64,
@@ -70,7 +70,7 @@ const ContextError = error {
 	NoCore
 };
 
-const Context = struct {
+pub const Context = struct {
 	threads: []std.Thread,
 	mutex: std.Thread.Mutex,
 	running: u64, // atomic
@@ -127,7 +127,7 @@ const Context = struct {
 	}
 };
 
-const VM = struct {
+pub const VM = struct {
 	cores: []Core,
 	memory: Memory,
 	context: ?*Context,

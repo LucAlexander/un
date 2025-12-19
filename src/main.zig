@@ -505,11 +505,22 @@ const IRNode = union(enum){
 const Program = struct {
 	binds: Map(Bind),
 	mem: *const std.mem.Allocator,
+	config: ir.Config,
+	vm: ir.VM,
 	
 	pub fn init(mem: *const std.mem.Allocator) Program {
+		const config = ir.Config{
+			.screen_width = 1,
+			.screen_height = 1,
+			.cores = 4,
+			.mem_size = 0x100000,
+			.mem = mem.*
+		};
 		return Program {
 			.binds = Map(Bind).init(mem.*),
-			.mem=mem
+			.mem=mem,
+			.config = config,
+			.vm = ir.VM.init(config)
 		};
 	}
 
@@ -1805,9 +1816,23 @@ const Program = struct {
 
 	pub fn evaluate(self: *Program, repr: ReifableRepr) *Expr {
 		var error_buffer = Buffer(ir.Error).init(self.mem.*);
-		_ = ir.assemble_bytecode(self.mem, repr.parsed.items, &error_buffer) catch unreachable;
-		//TODO write reif to static
-		//TODO run in context
+		const bytecode = ir.assemble_bytecode(self.mem, repr.parsed.items, &error_buffer) catch unreachable;
+		var offset:u64 = 0;
+		for (repr.reif.static.items) |reif_byte_segment| {
+			const reif_bytes = std.mem.bytesAsSlice(u8, reif_byte_segment[0..]);
+			self.vm.load_bytes(offset, reif_bytes);
+			offset += reif_bytes.len;
+		}
+		const start = 0x200;
+		self.vm.load_bytes(start, bytecode);
+		var context = ir.Context.init(self.config, &self.vm);
+		self.vm.context = &context;
+		_ = context.awaken_core(start >> 2) catch {
+			std.debug.print("Corrupted vm state\n", .{});
+			context.deinit();
+		};
+		context.await_cores();
+		context.deinit();
 		//TODO lift out reifeid list structure
 		return self.mem.create(Expr) catch unreachable;//TODO placeholder
 	}
