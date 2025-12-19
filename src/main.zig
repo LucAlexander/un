@@ -903,23 +903,31 @@ const Program = struct {
 					}
 					return null;
 				},
-				.ADD,
-				.SUB,
-				.MUL,
-				.DIV,
-				.MOD,
-				.UADD,
-				.USUB,
-				.UMUL,
-				.UDIV,
-				.UMOD,
-				.SHR,
-				.SHL,
-				.AND,
-				.OR,
-				.XOR,
-				.NOT,
-				.COM,
+				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
+					if (is_register(expr.list.items[1])) |dest| {
+						if (is_alu_arg(expr.list.items[2])) |left| {
+							if (is_alu_arg(expr.list.items[3])) |right| {
+								const inst = Instruction{
+									.tag = translate_tag(expr.list.items[0]),
+									.data = .{
+										.alu_bin = .{
+											.dest = dest,
+											.left = left,
+											.right = right
+										}
+									}
+								};
+								parsed.append(inst)
+									catch unreachable;
+								continue;
+							}
+						}
+					}
+					return null;
+				},
+				.NOT, .COM => {
+					return null;
+				}
 				.CMP,
 				.JMP,
 				.JEQ, 
@@ -1919,6 +1927,46 @@ const Program = struct {
 	}
 };
 
+pub fn translate_tag(tag: TOKEN) ir.TOKEN {
+	switch (tag){
+		.MOV => { return ir.TOKEN.MOV;},
+		.ADD => { return ir.TOKEN.ADD;},
+		.SUB => { return ir.TOKEN.SUB;},
+		.MUL => { return ir.TOKEN.MUL;},
+		.DIV => { return ir.TOKEN.DIV;},
+		.MOD => { return ir.TOKEN.MOD;},
+		.UADD => { return ir.TOKEN.UADD;},
+		.USUB => { return ir.TOKEN.USUB;},
+		.UMUL => { return ir.TOKEN.UMUL;},
+		.UDIV => { return ir.TOKEN.UDIV;},
+		.UMOD => { return ir.TOKEN.UMOD;},
+		.SHR => { return ir.TOKEN.SHR;},
+		.SHL => { return ir.TOKEN.SHL;},
+		.AND => { return ir.TOKEN.AND;},
+		.OR => { return ir.TOKEN.OR;},
+		.XOR => { return ir.TOKEN.XOR;},
+		.NOT => { return ir.TOKEN.NOT;},
+		.COM => { return ir.TOKEN.COM;},
+		.CMP => { return ir.TOKEN.CMP;},
+		.JMP => { return ir.TOKEN.JMP;},
+		.JEQ => { return ir.TOKEN.JEQ;},
+		.JNE => { return ir.TOKEN.JNE;},
+		.JGT => { return ir.TOKEN.JGT;},
+		.JGE => { return ir.TOKEN.JGE;},
+		.JLT => { return ir.TOKEN.JLT;},
+		.JLE => { return ir.TOKEN.JLE;},
+		.CALL => { return ir.TOKEN.CALL;},
+		.RET => { return ir.TOKEN.RET;},
+		.PSH => { return ir.TOKEN.PSH;},
+		.POP => { return ir.TOKEN.POP;},
+		.INT => { return ir.TOKEN.INT;},
+		else => {
+			return ir.TOKEN.MOV; //TODO should be an error case somehow
+		}
+	}
+	return ir.TOKEN.MOV; //TODO this too
+}
+
 pub fn is_register(expr: *Expr) ?ir.Register {
 	if (expr.* == .list){
 		return null;
@@ -1946,6 +1994,20 @@ pub fn is_dregister(expr: *Expr) ?ir.Regsiter {
 
 pub fn is_literal(expr: *Expr) ?u16 {
 	//TODO
+}
+
+pub fn is_alu_arg(expr: *Expr) ?ALUArg {
+	if (is_register(expr)) |x| {
+		return ALUArg{
+			.register = x
+		};
+	}
+	if (is_literal) |y| {
+		return ALUArg{
+			.literal = y
+		};
+	}
+	return null;
 }
 
 const LabelChain = union(enum){
