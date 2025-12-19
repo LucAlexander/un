@@ -547,7 +547,7 @@ const Program = struct {
 						continue;
 					}
 					if (self.parse_ir(candidate)) |repr| {
-						return self.evaluate(repr.items);
+						return self.evaluate(repr);
 					}
 					return candidate;
 				}
@@ -733,16 +733,16 @@ const Program = struct {
 		return expr.list.items[expr.list.items.len-1];
 	}
 
-	pub fn parse_ir(self: *Program, expr: *Expr) ?Buffer(ir.Instruction) {
-		if (expr.* == .atom){
+	pub fn parse_ir(self: *Program, programexpr: *Expr) ?ReifableRepr {
+		if (programexpr.* == .atom){
 			return null;
 		}
-		if (expr.list.items.len == 0){
+		if (programexpr.list.items.len == 0){
 			return null;
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		var reif = Reif.init(self.mem);
-		if (self.normalize(&normalized, &reif, expr, true) == null){
+		if (self.normalize(&normalized, &reif, programexpr, true) == null){
 			if (debug){
 				std.debug.print("Failed normalization parse\n", .{});
 			}
@@ -785,20 +785,20 @@ const Program = struct {
 		}
 		var parsed = Buffer(ir.Instruction).init(self.mem.*);
 		var i: u64 = 0;
-		while (i < normalized.items.len){
+		while (i < normalized.items.len) : (i += 1){
 			const expr = normalized.items[i];
 			switch (expr.list.items[0].atom.tag){
 				.MOV => {
 					if (is_register(expr.list.items[1])) |dest| {
-						if (is_regsiter(expr.list.items[2])) |src| {
-							const inst = Instruction{
+						if (is_register(expr.list.items[2])) |src| {
+							const inst = ir.Instruction{
 								.tag = ir.TOKEN.MOV,
 								.data = .{
 									.move = .{
-										.dest = LArg{
+										.dest = ir.LArg{
 											.register = dest
 										},
-										.src = RArg{
+										.src = ir.RArg{
 											.register = src
 										}
 									}
@@ -808,15 +808,15 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
-						if (is_dregsiter(expr.list.items[2])) |src| {
-							const inst = Instruction{
+						if (is_dregister(expr.list.items[2])) |src| {
+							const inst = ir.Instruction{
 								.tag = ir.TOKEN.MOV,
 								.data = .{
 									.move = .{
-										.dest = LArg{
+										.dest = ir.LArg{
 											.register = dest
 										},
-										.src = RArg{
+										.src = ir.RArg{
 											.dregister = src
 										}
 									}
@@ -827,14 +827,14 @@ const Program = struct {
 							continue;
 						}
 						else if (is_literal(expr.list.items[2])) |src| {
-							const inst = Instruction{
+							const inst = ir.Instruction{
 								.tag = ir.TOKEN.MOV,
 								.data = .{
 									.move = .{
-										.dest = LArg{
+										.dest = ir.LArg{
 											.register = dest
 										},
-										.src = RArg{
+										.src = ir.RArg{
 											.literal = src
 										}
 									}
@@ -846,15 +846,15 @@ const Program = struct {
 						}
 					}
 					if (is_dregister(expr.list.items[1])) |dest| {
-						if (is_regsiter(expr.list.items[2])) |src| {
-							const inst = Instruction{
+						if (is_register(expr.list.items[2])) |src| {
+							const inst = ir.Instruction{
 								.tag = ir.TOKEN.MOV,
 								.data = .{
 									.move = .{
-										.dest = LArg{
+										.dest = ir.LArg{
 											.dregister = dest
 										},
-										.src = RArg{
+										.src = ir.RArg{
 											.register = src
 										}
 									}
@@ -864,15 +864,15 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
-						if (is_dregsiter(expr.list.items[2])) |src| {
-							const inst = Instruction{
+						if (is_dregister(expr.list.items[2])) |src| {
+							const inst = ir.Instruction{
 								.tag = ir.TOKEN.MOV,
 								.data = .{
 									.move = .{
-										.dest = LArg{
+										.dest = ir.LArg{
 											.dregister = dest
 										},
-										.src = RArg{
+										.src = ir.RArg{
 											.dregister = src
 										}
 									}
@@ -883,14 +883,14 @@ const Program = struct {
 							continue;
 						}
 						else if (is_literal(expr.list.items[2])) |src| {
-							const inst = Instruction{
+							const inst = ir.Instruction{
 								.tag = ir.TOKEN.MOV,
 								.data = .{
 									.move = .{
-										.dest = LArg{
+										.dest = ir.LArg{
 											.dregister = dest
 										},
-										.src = RArg{
+										.src = ir.RArg{
 											.literal = src
 										}
 									}
@@ -907,8 +907,8 @@ const Program = struct {
 					if (is_register(expr.list.items[1])) |dest| {
 						if (is_alu_arg(expr.list.items[2])) |left| {
 							if (is_alu_arg(expr.list.items[3])) |right| {
-								const inst = Instruction{
-									.tag = translate_tag(expr.list.items[0].atom),
+								const inst = ir.Instruction{
+									.tag = translate_tag(expr.list.items[0].atom.tag),
 									.data = .{
 										.alu_bin = .{
 											.dest = dest,
@@ -928,8 +928,8 @@ const Program = struct {
 				.NOT, .COM => {
 					if (is_register(expr.list.items[1])) |dest| {
 						if (is_alu_arg(expr.list.items[2])) |src| {
-							const inst = Instruction {
-								.tag = translate_tag(expr.list.items[0].atom),
+							const inst = ir.Instruction {
+								.tag = translate_tag(expr.list.items[0].atom.tag),
 								.data = .{
 									.alu_un = .{
 										.dest = dest,
@@ -937,37 +937,36 @@ const Program = struct {
 									}
 								}
 							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
 						}
-						parsed.append(inst)
-							catch unreachable;
-						continue;
 					}
 					return null;
 				},
 				.CMP => {
 					if (is_register(expr.list.items[1])) |dest| {
 						if (is_alu_arg(expr.list.items[2])) |src| {
-							const inst = Instruction {
-								.tag = translate_tag(expr.list.items[0].atom),
+							const inst = ir.Instruction {
+								.tag = translate_tag(expr.list.items[0].atom.tag),
 								.data = .{
 									.compare = .{
-										.dest = dest,
-										.src = src
+										.left = dest,
+										.right = src
 									}
 								}
 							};
+							parsed.append(inst)
+								catch unreachable;
+							continue;
 						}
-						parsed.append(inst)
-							catch unreachable;
-						continue;
 					}
 					return null;
-
 				},
 				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE => {
 					if (is_literal(expr.list.items[1])) |lit| {
-						const inst = Instruction{
-							.tag = translate_tag(expr.list.items[0]),
+						const inst = ir.Instruction{
+							.tag = translate_tag(expr.list.items[0].atom.tag),
 							.data = .{
 								.jump = lit
 							}
@@ -980,8 +979,8 @@ const Program = struct {
 				},
 				.CALL => {
 					if (is_literal(expr.list.items[1])) |lit| {
-						const inst = Instruction{
-							.tag = translate_tag(expr.list.items[0]),
+						const inst = ir.Instruction{
+							.tag = translate_tag(expr.list.items[0].atom.tag),
 							.data = .{
 								.call = lit
 							}
@@ -994,8 +993,8 @@ const Program = struct {
 				},
 				.RET => {
 					if (is_alu_arg(expr.list.items[1])) |val| {
-						const inst = Instruction{
-							.tag = translate_tag(expr.list.items[0].atom),
+						const inst = ir.Instruction{
+							.tag = translate_tag(expr.list.items[0].atom.tag),
 							.data = .{
 								.ret = val
 							}
@@ -1005,11 +1004,11 @@ const Program = struct {
 						continue;
 					}
 					return null;
-				}
+				},
 				.PSH => {
 					if (is_register(expr.list.items[1])) |src| {
-						const inst = Instruction{
-							.tag = translate_tag(expr.list.items[0].atom),
+						const inst = ir.Instruction{
+							.tag = translate_tag(expr.list.items[0].atom.tag),
 							.data = .{
 								.push = src
 							}
@@ -1022,8 +1021,8 @@ const Program = struct {
 				},
 				.POP => {
 					if (is_register(expr.list.items[1])) |src| {
-						const inst = Instruction{
-							.tag = translate_tag(expr.list.items[0].atom),
+						const inst = ir.Instruction{
+							.tag = translate_tag(expr.list.items[0].atom.tag),
 							.data = .{
 								.pop = src
 							}
@@ -1035,23 +1034,29 @@ const Program = struct {
 					return null;
 				},
 				.INT => {
-					parsed.append(Instruction{
+					parsed.append(ir.Instruction{
 						.tag = ir.TOKEN.INT,
 						.data = .{
-							.interrupt = .{}
+							.interrupt = undefined
 						}
 					}) catch unreachable;
 					continue;
 				},
+				else => {
+					return null;
+				}
 			}
 		}
-		return parsed;
+		return ReifableRepr{
+			.parsed = parsed,
+			.reif = reif
+		};
 	}
 
 	pub fn inscribe_labels(self: *Program, normalized: *Buffer(*Expr)) void {
 		var i: u64 = 0;
 		var chainmap = Map(LabelChain).init(self.mem.*);
-		while (i < normalized.items.len) : (i += 1){
+		while (i < normalized.items.len){
 			const expr = normalized.items[i];
 			switch (expr.list.items[0].atom.tag){
 				.JMP, .JEQ, .JNE, .JLE, .JGE, .JLT, .JGT, .CALL => {
@@ -1073,6 +1078,8 @@ const Program = struct {
 						chainmap.put(expr.list.items[1].atom.text, newchain)
 							catch unreachable;
 					}
+					i += 1;
+					continue;
 				},
 				.LABEL => {
 					const buf = self.mem.alloc(u8, 20)
@@ -1099,13 +1106,14 @@ const Program = struct {
 						.fulfilled = replacement
 					}) catch unreachable;
 					_ = normalized.orderedRemove(i);
-					i -= 1;
+					continue;
 				},
 				.REG => {
 					_ = normalized.orderedRemove(i);
-					i -= 1;
-				}
+					continue;
+				},
 				else => {
+					i += 1;
 					continue;
 				}
 			}
@@ -1795,9 +1803,10 @@ const Program = struct {
 		return true;
 	}
 
-	pub fn evaluate(self: *Program, repr: []ir.Instruction) *Expr {
+	pub fn evaluate(self: *Program, repr: ReifableRepr) *Expr {
 		var error_buffer = Buffer(ir.Error).init(self.mem.*);
-		_ = ir.assemble_bytecode(self.mem, repr, &error_buffer) catch unreachable;
+		_ = ir.assemble_bytecode(self.mem, repr.parsed.items, &error_buffer) catch unreachable;
+		//TODO write reif to static
 		//TODO run in context
 		//TODO lift out reifeid list structure
 		return self.mem.create(Expr) catch unreachable;//TODO placeholder
@@ -2029,6 +2038,11 @@ const Program = struct {
 	}
 };
 
+const ReifableRepr = struct {
+	parsed: Buffer(ir.Instruction),
+	reif: Reif
+};
+
 pub fn translate_tag(tag: TOKEN) ir.TOKEN {
 	switch (tag){
 		.MOV => { return ir.TOKEN.MOV;},
@@ -2075,14 +2089,14 @@ pub fn is_register(expr: *Expr) ?ir.Register {
 	}
 	if (expr.atom.tag == .REG0) return ir.Register.R0;
 	if (expr.atom.tag == .REG1) return ir.Register.R1;
-	if (expr.atom.tag == .REG2) return ir.Regsiter.R2;
-	if (expr.atom.tag == .REG3) return ir.Regsiter.R3;
-	if (expr.atom.tag == .FPTR) return ir.Regsiter.FP;
-	if (expr.atom.tag == .SPTR) return ir.Regsiter.SP;
+	if (expr.atom.tag == .REG2) return ir.Register.R2;
+	if (expr.atom.tag == .REG3) return ir.Register.R3;
+	if (expr.atom.tag == .FPTR) return ir.Register.FP;
+	if (expr.atom.tag == .SPTR) return ir.Register.SP;
 	return null;
 }
 
-pub fn is_dregister(expr: *Expr) ?ir.Regsiter {
+pub fn is_dregister(expr: *Expr) ?ir.Register {
 	if (expr.* == .atom){
 		return null;
 	}
@@ -2094,19 +2108,20 @@ pub fn is_dregister(expr: *Expr) ?ir.Regsiter {
 	return null;
 }
 
-pub fn is_literal(expr: *Expr) ?u16 {
+pub fn is_literal(_: *Expr) ?u16 {
 	//TODO
+	return 0;
 }
 
-pub fn is_alu_arg(expr: *Expr) ?ALUArg {
+pub fn is_alu_arg(expr: *Expr) ?ir.ALUArg {
 	if (is_register(expr)) |x| {
-		return ALUArg{
+		return ir.ALUArg{
 			.register = x
 		};
 	}
-	if (is_literal) |y| {
-		return ALUArg{
-			.literal = y
+	if (is_literal(expr)) |y| {
+		return ir.ALUArg{
+			.literal = @truncate(y)
 		};
 	}
 	return null;

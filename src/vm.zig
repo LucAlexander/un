@@ -1083,18 +1083,18 @@ const ParseError = error {
 	UnexpectedEOF
 };
 
-const LArg = union(enum) {
+pub const LArg = union(enum) {
 	register: Register,
 	dregister: Register,
 };
 
-const RArg = union(enum) {
+pub const RArg = union(enum) {
 	register: Register,
 	dregister: Register,
 	literal: u16
 };
 
-const ALUArg = union(enum) {
+pub const ALUArg = union(enum) {
 	register: Register,
 	literal: u8
 };
@@ -1128,7 +1128,7 @@ pub const Instruction = struct {
 	}
 };
 
-const TOKEN = enum(u64) {
+pub const TOKEN = enum(u64) {
 	MOV=0,
 	ADD, SUB, MUL, DIV, MOD,
 	UADD, USUB, UMUL, UDIV, UMOD,
@@ -1712,7 +1712,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 			.POP => {
 				bytes[byte] = 83;
 				byte += 1;
-				bytes[byte] = @truncate(@intFromEnum(inst.data.push));
+				bytes[byte] = @truncate(@intFromEnum(inst.data.pop));
 				byte += 3;
 				continue;
 			},
