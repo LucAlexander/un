@@ -313,9 +313,15 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 				c = text[i];
 			}
 			token.text = text[start .. i];
-			if (keywords.get(token.text)) |tag| {
-				token.tag = tag;
-			}
+			_ = std.fmt.parseInt(u16, token.text, 16) catch {
+				if (keywords.get(token.text)) |tag| {
+					token.tag = tag;
+				}
+				tokens.append(token)
+					catch unreachable;
+				continue;
+			};
+			token.tag = .NUM;
 			tokens.append(token)
 				catch unreachable;
 			continue;
@@ -1473,6 +1479,11 @@ const Program = struct {
 
 	pub fn color_register(self: *Program, normalized: *Buffer(*Expr), i: *u64, expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(u64)) void {
 		if (expr.* != .atom){
+			if (expr.list.items[0].* == .atom){
+				if (expr.list.items[0].atom.tag == .AT){
+					self.color_register(normalized, i, expr.list.items[1], regmap, q, vacated);
+				}
+			}
 			return;
 		}
 		if (regmap.get(expr.atom.text)) |old| {
@@ -1832,12 +1843,13 @@ const Program = struct {
 		};
 		context.await_cores();
 		context.deinit();
-		const return_address = self.vm.cores[0].reg[0];
+		const return_address = self.vm.cores[0].reg[3];
 		return self.lift_reif(repr.reif, return_address);
 	}
 
 	pub fn lift_reif(self: *Program, reif: Reif, addr: u64) *Expr {
 		const start = addr >> 3;
+		std.debug.print("{}\n", .{self.vm.memory.mem[addr]});
 		const n = self.vm.memory.words[start];
 		var output = self.mem.create(Expr)
 			catch unreachable;
@@ -2212,14 +2224,14 @@ const LabelChain = union(enum){
 };
 
 const ReifTag = enum(u64) {
-	reif_val = 0x00000000000000000,
-	reif_ptr = 0x00000000100000000,
-	reif_sym = 0x00000000200000000
+	reif_val = 0x0000000000000000,
+	reif_ptr = 0x0000000100000000,
+	reif_sym = 0x0000000200000000
 };
 
-const reifVal = 0x00000000000000000;
-const reifPtr = 0x00000000100000000;
-const reifSym = 0x00000000200000000;
+const reifVal = 0x0000000000000000;
+const reifPtr = 0x0000000100000000;
+const reifSym = 0x0000000200000000;
 
 const Reif = struct {
 	mem: *const std.mem.Allocator,
