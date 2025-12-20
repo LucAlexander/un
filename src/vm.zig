@@ -265,7 +265,9 @@ pub fn add_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] + core.reg[right];
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(sleft + sright));
 	ip.* += 1;
 	return true;
 }
@@ -275,7 +277,9 @@ pub fn add_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] + right;
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @as(u64, @bitCast(sleft + sright));
 	ip.* += 1;
 	return true;
 }
@@ -285,7 +289,9 @@ pub fn add_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left + core.reg[right];
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(sleft + sright));
 	ip.* += 1;
 	return true;
 }
@@ -295,7 +301,9 @@ pub fn add_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left + right;
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @bitCast(sleft + sright);
 	ip.* += 1;
 	return true;
 }
@@ -305,7 +313,9 @@ pub fn sub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] - core.reg[right];
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(sleft - sright));
 	ip.* += 1;
 	return true;
 }
@@ -315,7 +325,9 @@ pub fn sub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] - right;
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @as(u64, @bitCast(sleft - sright));
 	ip.* += 1;
 	return true;
 }
@@ -325,7 +337,9 @@ pub fn sub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left - core.reg[right];
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(sleft - sright));
 	ip.* += 1;
 	return true;
 }
@@ -335,7 +349,9 @@ pub fn sub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left - right;
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @bitCast(sleft - sright);
 	ip.* += 1;
 	return true;
 }
@@ -345,7 +361,9 @@ pub fn mul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] * core.reg[right];
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(sleft * sright));
 	ip.* += 1;
 	return true;
 }
@@ -355,7 +373,9 @@ pub fn mul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] * right;
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @as(u64, @bitCast(sleft * sright));
 	ip.* += 1;
 	return true;
 }
@@ -365,7 +385,9 @@ pub fn mul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left * core.reg[right];
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(sleft * sright));
 	ip.* += 1;
 	return true;
 }
@@ -375,7 +397,9 @@ pub fn mul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left * right;
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @bitCast(sleft * sright);
 	ip.* += 1;
 	return true;
 }
@@ -385,7 +409,9 @@ pub fn div_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] / core.reg[right];
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(@divTrunc(sleft , sright)));
 	ip.* += 1;
 	return true;
 }
@@ -395,7 +421,9 @@ pub fn div_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] / right;
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @as(u64, @bitCast(@divTrunc(sleft , sright)));
 	ip.* += 1;
 	return true;
 }
@@ -405,7 +433,9 @@ pub fn div_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left / core.reg[right];
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(@divTrunc(sleft , sright)));
 	ip.* += 1;
 	return true;
 }
@@ -415,7 +445,9 @@ pub fn div_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left / right;
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @bitCast(@divTrunc(sleft , sright));
 	ip.* += 1;
 	return true;
 }
@@ -425,7 +457,9 @@ pub fn mod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] % core.reg[right];
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(@mod(sleft , sright)));
 	ip.* += 1;
 	return true;
 }
@@ -435,7 +469,9 @@ pub fn mod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = core.reg[left] % right;
+	const sleft: i64 = @bitCast(core.reg[left]);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @as(u64, @bitCast(@mod(sleft , sright)));
 	ip.* += 1;
 	return true;
 }
@@ -445,7 +481,9 @@ pub fn mod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left % core.reg[right];
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @bitCast(core.reg[right]);
+	core.reg[dst] = @as(u64, @bitCast(@mod(sleft , sright)));
 	ip.* += 1;
 	return true;
 }
@@ -455,7 +493,9 @@ pub fn mod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = left % right;
+	const sleft: i64 = @intCast(left);
+	const sright: i64 = @intCast(right);
+	core.reg[dst] = @as(u64, @bitCast(@mod(sleft , sright)));
 	ip.* += 1;
 	return true;
 }

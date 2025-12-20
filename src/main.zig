@@ -2162,10 +2162,10 @@ pub fn translate_tag(tag: TOKEN) ir.TOKEN {
 		.POP => { return ir.TOKEN.POP;},
 		.INT => { return ir.TOKEN.INT;},
 		else => {
-			return ir.TOKEN.MOV; //TODO should be an error case somehow
+			unreachable;
 		}
 	}
-	return ir.TOKEN.MOV; //TODO this too
+	unreachable;
 }
 
 pub fn is_register(expr: *Expr) ?ir.Register {
@@ -2251,7 +2251,6 @@ const Reif = struct {
 	}
 
 	pub fn add_relation(self: *Reif, expr: *Expr) u64 {
-		//TODO numerals are different from symbols
 		if (expr.* == .atom){
 			const sym = self.current_symbol | reifSym;
 			self.current_symbol += 1;
@@ -2363,3 +2362,4 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 }
 
 //TODO separate comptime vm stagings
+//TODO string reification and reflection
