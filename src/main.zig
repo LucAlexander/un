@@ -517,7 +517,7 @@ const Program = struct {
 	binds: Map(Bind),
 	mem: *const std.mem.Allocator,
 	config: ir.Config,
-	vm: ir.VM,
+	vm: Map(*ir.VM),
 	
 	pub fn init(mem: *const std.mem.Allocator) Program {
 		const config = ir.Config{
@@ -527,11 +527,17 @@ const Program = struct {
 			.mem_size = 0x100000,
 			.mem = mem.*
 		};
+		var irmap = Map(*ir.VM).init(mem.*);
+		const vm = mem.create(ir.VM)
+			catch unreachable;
+		vm.* = ir.VM.init(config);
+		irmap.put("vm", vm)
+			catch unreachable;
 		return Program {
 			.binds = Map(Bind).init(mem.*),
 			.mem=mem,
 			.config = config,
-			.vm = ir.VM.init(config)
+			.vm = irmap
 		};
 	}
 
@@ -569,7 +575,7 @@ const Program = struct {
 						continue;
 					}
 					if (self.parse_ir(candidate)) |repr| {
-						return self.evaluate(repr);
+						return self.evaluate(vm_target, repr);
 					}
 					return candidate;
 				}
@@ -1829,40 +1835,47 @@ const Program = struct {
 		return true;
 	}
 
-	pub fn evaluate(self: *Program, repr: ReifableRepr) *Expr {
+	pub fn evaluate(self: *Program, vm_target: Token, repr: ReifableRepr) *Expr {
+		var vm = self.vm.get(vm_target.text);
+		if (vm == null){
+			vm = self.mem.create(ir.VM)
+				catch unreachable;
+			vm.?.* = ir.VM.init(self.config);
+			self.vm.put(vm_target.text, vm.?)
+				catch unreachable;
+		}
 		var error_buffer = Buffer(ir.Error).init(self.mem.*);
 		const bytecode = ir.assemble_bytecode(self.mem, repr.parsed.items, &error_buffer) catch unreachable;
 		var offset:u64 = 0;
 		for (repr.reif.static.items) |reif_byte_segment| {
 			const reif_bytes = std.mem.bytesAsSlice(u8, reif_byte_segment[0..]);
-			self.vm.load_bytes(offset, reif_bytes);
+			vm.?.load_bytes(offset, reif_bytes);
 			offset += reif_bytes.len;
 		}
 		const start = 0x200;
-		self.vm.load_bytes(start, bytecode);
-		var context = ir.Context.init(self.config, &self.vm);
-		self.vm.context = &context;
+		vm.?.load_bytes(start, bytecode);
+		var context = ir.Context.init(self.config, vm.?);
+		vm.?.context = &context;
 		_ = context.awaken_core(start >> 2) catch {
 			std.debug.print("Corrupted vm state\n", .{});
 			context.deinit();
 		};
 		context.await_cores();
 		context.deinit();
-		const return_address = self.vm.cores[0].reg[3];
-		return self.lift_reif(repr.reif, return_address);
+		const return_address = vm.?.cores[0].reg[3];
+		return self.lift_reif(vm.?, repr.reif, return_address);
 	}
 
-	pub fn lift_reif(self: *Program, reif: Reif, addr: u64) *Expr {
+	pub fn lift_reif(self: *Program, vm: *ir.VM, reif: Reif, addr: u64) *Expr {
 		const start = addr >> 3;
-		std.debug.print("{}\n", .{self.vm.memory.mem[addr]});
-		const n = self.vm.memory.words[start];
+		const n = vm.memory.words[start];
 		var output = self.mem.create(Expr)
 			catch unreachable;
 		output.* = Expr{
 			.list = Buffer(*Expr).init(self.mem.*)
 		};
 		for (0..n) |i| {
-			const elem = self.vm.memory.words[start+i+1];
+			const elem = vm.memory.words[start+i+1];
 			const tag = elem & 0xffffffff00000000;
 			switch (@as(ReifTag, @enumFromInt(tag))) {
 				.reif_val => {
@@ -1884,7 +1897,7 @@ const Program = struct {
 					continue;
 				},
 				.reif_ptr => {
-					const loc = self.lift_reif(reif, elem & 0xffffffff);
+					const loc = self.lift_reif(vm, reif, elem & 0xffffffff);
 					output.list.append(loc)
 						catch unreachable;
 					continue;
