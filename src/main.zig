@@ -84,7 +84,12 @@ pub fn main() !void {
 	}
 	std.debug.print("\n", .{});
 	var program = Program.init(&mem);
-	const val = program.compute(raw_expressions, &error_log) catch {
+	const default_target = Token {
+		.text = mem.dupe(u8, "vm") catch unreachable,
+		.pos = 0,
+		.tag=.IDEN
+	};
+	const val = program.compute(raw_expressions, default_target, &error_log) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
 		}
@@ -530,7 +535,7 @@ const Program = struct {
 		};
 	}
 
-	pub fn compute(self: *Program, program: Buffer(*Expr), err: *Buffer(Error)) ParseError!*Expr {
+	pub fn compute(self: *Program, program: Buffer(*Expr), vm_target: Token, err: *Buffer(Error)) ParseError!*Expr {
 		var old_binds = self.binds.count();
 		while (true){
 			for (program.items) |expr| {
@@ -548,7 +553,7 @@ const Program = struct {
 							continue;
 						}
 					}
-					const candidate = try self.descend(expr, err);
+					const candidate = try self.descend(expr, vm_target, err);
 					if (candidate.* == .list){
 						if (candidate.list.items.len == 4){
 							if (candidate.list.items[0].atom.tag == .BIND){
@@ -1905,7 +1910,7 @@ const Program = struct {
 		return output;
 	}
 
-	pub fn descend(self: *Program, expr: *Expr, err: *Buffer(Error)) ParseError!*Expr {
+	pub fn descend(self: *Program, expr: *Expr, vm_target:Token, err: *Buffer(Error)) ParseError!*Expr {
 		switch (expr.*){
 			.atom => {
 				return expr;
@@ -1923,7 +1928,7 @@ const Program = struct {
 										catch unreachable;
 									return ParseError.UnexpectedToken;
 								}
-								const val = try self.descend(expr.list.items[0].list.items[1], err);
+								const val = try self.descend(expr.list.items[0].list.items[1], vm_target, err);
 								if (val.* == .atom){
 									expr.list.items[0] = val;
 									break;
@@ -1938,11 +1943,11 @@ const Program = struct {
 								const loc = self.mem.create(Expr)
 									catch unreachable;
 								loc.* = flathead;
-								return try self.descend(loc, err);
+								return try self.descend(loc, vm_target, err);
 							}
 						}
 					}
-					expr.list.items[0] = try self.descend(expr.list.items[0], err);
+					expr.list.items[0] = try self.descend(expr.list.items[0], vm_target, err);
 					break;
 				}
 				if (expr.list.items[0].* == .atom){
@@ -1952,7 +1957,7 @@ const Program = struct {
 								catch unreachable;
 							return ParseError.UnexpectedToken;
 						}
-						expr.list.items[1] = try self.descend(expr.list.items[1], err);
+						expr.list.items[1] = try self.descend(expr.list.items[1], vm_target, err);
 						if (expr.list.items[1].* == .list){
 							if (expr.list.items[1].list.items.len != 1){
 								err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 1 arguments for flatten list, found {}\n", .{expr.list.items[1].list.items.len}))
@@ -1960,7 +1965,7 @@ const Program = struct {
 								return ParseError.UnexpectedToken;
 							}
 						}
-						return try self.descend(expr.list.items[1].list.items[0], err);
+						return try self.descend(expr.list.items[1].list.items[0], vm_target, err);
 					}
 					if (expr.list.items[0].atom.tag == .BIND){
 						const bind = try expr_to_bind(self.mem, expr, err);
@@ -1978,14 +1983,24 @@ const Program = struct {
 								}
 							}
 						}
-						expr.list.items[3] = try self.descend(expr.list.items[3], err);
+						expr.list.items[3] = try self.descend(expr.list.items[3], vm_target, err);
 						return expr;
 					}
 					if (expr.list.items[0].atom.tag == .COMP){
-						if (expr.list.items[1].* == .atom){
+						if (expr.list.items.len != 3){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 3 argumentns for comp block\n", .{}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						if (expr.list.items[2].* == .atom){
 							return expr.list.items[1];
 						}
-						return try self.compute(expr.list.items[1].list, err);
+						if (expr.list.items[1].* == .list){
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected symbol for comp vm target\n", .{}))
+								catch unreachable;
+							return ParseError.UnexpectedToken;
+						}
+						return try self.compute(expr.list.items[2].list, expr.list.items[1].atom, err);
 					}
 					if (expr.list.items[0].atom.tag == .UID){
 						if (expr.list.items.len != 3){
@@ -2023,7 +2038,7 @@ const Program = struct {
 								catch unreachable;
 						}
 						const replace = distribute_args(aliasmap, expr.list.items[2]);
-						return try self.descend(replace, err);
+						return try self.descend(replace, vm_target, err);
 					}
 					if (expr.list.items[0].atom.tag == .USE){
 						if (expr.list.items.len != 2){
@@ -2072,7 +2087,7 @@ const Program = struct {
 											catch unreachable;
 										return ParseError.UnexpectedToken;
 									}
-									const val = try self.descend(expr.list.items[i].list.items[1], err);
+									const val = try self.descend(expr.list.items[i].list.items[1], vm_target, err);
 									if (val.* == .atom){
 										expr.list.items[i] = val;
 										continue;
@@ -2085,7 +2100,7 @@ const Program = struct {
 							}
 						}
 					}
-					expr.list.items[i] = try self.descend(expr.list.items[i], err);
+					expr.list.items[i] = try self.descend(expr.list.items[i], vm_target, err);
 					i += 1;
 				}
 				if (expr.list.items[0].* == .list){
@@ -2111,7 +2126,7 @@ const Program = struct {
 								return wrapper;
 							}
 							const updated = try apply_args(self.mem, wrapper, bind, err);
-							return try self.compute(updated.list, err);
+							return try self.compute(updated.list, vm_target, err);
 						},
 						.list => {
 							if (bind.expr.list.items.len == 0){
@@ -2121,7 +2136,7 @@ const Program = struct {
 								return expr;
 							}
 							const replace = try apply_args(self.mem, expr, bind, err);
-							return try self.descend(replace, err);
+							return try self.descend(replace, vm_target, err);
 						}
 					}
 				}
