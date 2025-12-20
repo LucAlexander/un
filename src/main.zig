@@ -58,7 +58,7 @@ pub fn main() !void {
 	defer main_mem.deinit();
 	const mem = main_mem.allocator();
 	var filename = Buffer(u8).init(mem);
-	filename.appendSlice("test.un")
+	filename.appendSlice("test2.un")
 		catch unreachable;
 	const contents = try get_contents(&mem, filename.items);
 	var error_log = Buffer(Error).init(mem);
@@ -1833,8 +1833,57 @@ const Program = struct {
 		};
 		context.await_cores();
 		context.deinit();
-		//TODO lift out reifeid list structure
-		return self.mem.create(Expr) catch unreachable;//TODO placeholder
+		const return_address = self.vm.cores[0].reg[0];
+		return self.lift_reif(repr.reif, return_address);
+	}
+
+	pub fn lift_reif(self: *Program, reif: Reif, addr: u64) *Expr {
+		const start = addr >> 3;
+		const n = self.vm.memory.words[start];
+		var output = self.mem.create(Expr)
+			catch unreachable;
+		output.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		for (0..n) |i| {
+			const elem = self.vm.memory.words[start+i+1];
+			const tag = elem & 0xffffffff00000000;
+			switch (@as(ReifTag, @enumFromInt(tag))) {
+				.reif_val => {
+					const buf = self.mem.alloc(u8, 20)
+						catch unreachable;
+					const slice = std.fmt.bufPrint(buf, "{}", .{elem & 0xffffffff})
+						catch unreachable;
+					const loc = self.mem.create(Expr)
+						catch unreachable;
+					loc.* = Expr{
+						.atom = Token{
+							.text = slice,
+							.pos = 0,
+							.tag = .NUM
+						}
+					};
+					output.list.append(loc)
+						catch unreachable;
+					continue;
+				},
+				.reif_ptr => {
+					const loc = self.lift_reif(reif, elem & 0xffffffff);
+					output.list.append(loc)
+						catch unreachable;
+					continue;
+				},
+				.reif_sym => {
+					if (reif.reverse.get(elem & 0xffffffff)) |sym| {
+						output.list.append(sym)
+							catch unreachable;
+						continue;
+					}
+					unreachable;
+				},
+			}
+		}
+		return output;
 	}
 
 	pub fn descend(self: *Program, expr: *Expr, err: *Buffer(Error)) ParseError!*Expr {
@@ -2157,9 +2206,15 @@ const LabelChain = union(enum){
 	fulfilled: *Expr
 };
 
-const reif_val = 0x00000000000000000;
-const reif_ptr = 0x00000000100000000;
-const reif_sym = 0x00000000200000000;
+const ReifTag = enum(u64) {
+	reif_val = 0x00000000000000000,
+	reif_ptr = 0x00000000100000000,
+	reif_sym = 0x00000000200000000
+};
+
+const reifVal = 0x00000000000000000;
+const reifPtr = 0x00000000100000000;
+const reifSym = 0x00000000200000000;
 
 const Reif = struct {
 	mem: *const std.mem.Allocator,
@@ -2181,7 +2236,7 @@ const Reif = struct {
 	pub fn add_relation(self: *Reif, expr: *Expr) u64 {
 		//TODO numerals are different from symbols
 		if (expr.* == .atom){
-			const sym = self.current_symbol | reif_sym;
+			const sym = self.current_symbol | reifSym;
 			self.current_symbol += 1;
 			self.forward.put(expr.atom.text, sym)
 				catch unreachable;
@@ -2190,16 +2245,18 @@ const Reif = struct {
 			return sym;
 		}
 		const ptr = self.static.items.len;
-		var buffer = self.mem.alloc(u64, expr.list.items.len)
+		var buffer = self.mem.alloc(u64, expr.list.items.len+1)
 			catch unreachable;
 		var i:u64 = 0;
+		buffer[i] = expr.list.items.len;
+		i += 1;
 		for (expr.list.items) |sub| {
 			buffer[i] = self.add_relation(sub);
 			i += 1;
 		}
 		self.static.append(buffer)
 			catch unreachable;
-		return (ptr*8) | reif_ptr;
+		return (ptr*8) | reifPtr;
 	}
 };
 
