@@ -36,13 +36,15 @@ threadlocal var active_core: u64 = 0;
 const Core = struct {
 	reg: [8]u64,
 
-	pub fn init() Core {
+	pub fn init(memsize: u64) Core {
 		var core = Core{
 			.reg=undefined
 		};
 		for (0..8) |i| {
 			core.reg[i] = 0;
 		}
+		core.reg[rsp] = memsize-8;
+		core.reg[rfp] = memsize-8;
 		return core;
 	}
 };
@@ -139,7 +141,7 @@ pub const VM = struct {
 			.context = null
 		};
 		for (0..config.cores) |i| {
-			vm.cores[i] = Core.init();
+			vm.cores[i] = Core.init(config.mem_size);
 		}
 		return vm;
 	}

@@ -1167,10 +1167,10 @@ const Program = struct {
 							unreachable;
 						}
 					}
-					self.pop_register(normalized, &i, .REG0);
-					self.pop_register(normalized, &i, .REG1);
-					self.pop_register(normalized, &i, .REG2);
 					self.push_register(normalized, i+1, .REG3);
+					self.pop_register(normalized, i+1, .REG2);
+					self.pop_register(normalized, i+1, .REG1);
+					self.pop_register(normalized, i+1, .REG0);
 				},
 				else => {
 					continue;
@@ -1334,7 +1334,7 @@ const Program = struct {
 				catch unreachable;
 		}
 		else if (register == .REG2){
-			text = self.mem.dupe(u8, "16")
+			text = self.mem.dupe(u8, "10")
 				catch unreachable;
 		}
 		src.* = Expr{
@@ -1407,7 +1407,7 @@ const Program = struct {
 		i.* += 1;
 	}
 
-	pub fn pop_register(self: Program, normalized: *Buffer(*Expr), i: *u64, register: TOKEN) void {
+	pub fn pop_register(self: Program, normalized: *Buffer(*Expr), i: u64, register: TOKEN) void {
 		const push = self.mem.create(Expr)
 			catch unreachable;
 		push.* = Expr{
@@ -1435,9 +1435,8 @@ const Program = struct {
 			catch unreachable;
 		push.list.append(src)
 			catch unreachable;
-		normalized.insert(i.*, push)
+		normalized.insert(i, push)
 			catch unreachable;
-		i.* += 1;
 	}
 
 	pub fn push_register(self: Program, normalized: *Buffer(*Expr), i: u64, register: TOKEN) void {
@@ -2182,9 +2181,15 @@ pub fn is_dregister(expr: *Expr) ?ir.Register {
 	return null;
 }
 
-pub fn is_literal(_: *Expr) ?u16 {
-	//TODO
-	return 0;
+pub fn is_literal(expr: *Expr) ?u16 {
+	if (expr.* == .list){
+		return null;
+	}
+	if (expr.atom.tag == .NUM){
+		return std.fmt.parseInt(u16, expr.atom.text, 16)
+			catch unreachable;
+	}
+	return null;
 }
 
 pub fn is_alu_arg(expr: *Expr) ?ir.ALUArg {
@@ -2345,7 +2350,4 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	return new;
 }
 
-//TODO IR integration
-//TODO reification both ways
-//TODO comp staging
-//TODO comp compute hook
+//TODO separate comptime vm stagings
