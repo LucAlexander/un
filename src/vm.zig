@@ -982,16 +982,16 @@ pub fn cmp_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn jmp(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
-	core.reg[rip] += off;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	core.reg[rip] +%= @bitCast(off);
 	return true;
 }
 
 pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	if (core.reg[rsr] == 0){
-		ip.* += off;
+		ip.* +%= @bitCast(off);
 		return true;
 	}
 	ip.* += 1;
@@ -1000,9 +1000,9 @@ pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	if (core.reg[rsr] != 0){
-		ip.* += off;
+		ip.* +%= @bitCast(off);
 		return true;
 	}
 	ip.* += 1;
@@ -1011,9 +1011,9 @@ pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	if (core.reg[rsr] == 1){
-		ip.* += off;
+		ip.* +%= @bitCast(off);
 		return true;
 	}
 	ip.* += 1;
@@ -1022,9 +1022,9 @@ pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	if (core.reg[rsr] < 2){
-		ip.* += off;
+		ip.* +%= @bitCast(off);
 		return true;
 	}
 	ip.* += 1;
@@ -1033,9 +1033,9 @@ pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	if (core.reg[rsr] == 2){
-		ip.* += off;
+		ip.* +%= @bitCast(off);
 		return true;
 	}
 	ip.* += 1;
@@ -1044,9 +1044,9 @@ pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	if (core.reg[rsr] > 1){
-		ip.* += off;
+		ip.* +%= @bitCast(off);
 		return true;
 	}
 	ip.* += 1;
@@ -1055,13 +1055,13 @@ pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 
 pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
-	const off = (inst & 0xFFFF0000) >> 0x10;
+	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
 	core.reg[rsp] -= 8;
 	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rip]+1;
 	core.reg[rsp] -= 8;
 	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rfp];
 	core.reg[rfp] = core.reg[rsp];
-	core.reg[rip] += off;
+	core.reg[rip] +%= @bitCast(off);
 	return true;
 }
 
@@ -1957,5 +1957,3 @@ pub fn with(config:Config, bytecode: []u8, start: u64) void {
 
 //TODO decoder
 //TODO debugger
-//TODO distinction between signed and unsigned math
-//TODO make offset jumps signed in the interpreter portion
