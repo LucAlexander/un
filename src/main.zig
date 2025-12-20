@@ -1892,6 +1892,14 @@ const Program = struct {
 					}
 					unreachable;
 				},
+				.reif_str => {
+					if (reif.reverse.get(elem & 0xffffffff)) |sym| {
+						output.list.append(sym)
+							catch unreachable;
+						continue;
+					}
+					unreachable;
+				}
 			}
 		}
 		return output;
@@ -2226,12 +2234,14 @@ const LabelChain = union(enum){
 const ReifTag = enum(u64) {
 	reif_val = 0x0000000000000000,
 	reif_ptr = 0x0000000100000000,
-	reif_sym = 0x0000000200000000
+	reif_sym = 0x0000000200000000,
+	reif_str = 0x0000000300000000
 };
 
 const reifVal = 0x0000000000000000;
 const reifPtr = 0x0000000100000000;
 const reifSym = 0x0000000200000000;
+const reifStr = 0x0000000300000000;
 
 const Reif = struct {
 	mem: *const std.mem.Allocator,
@@ -2252,6 +2262,20 @@ const Reif = struct {
 
 	pub fn add_relation(self: *Reif, expr: *Expr) u64 {
 		if (expr.* == .atom){
+			if (expr.atom.tag == .STR){
+				var buffer = self.mem.alloc(u64, expr.atom.text.len-1)
+					catch unreachable;
+				var i:u64 = 0;
+				buffer[i] = expr.atom.text.len-1;
+				i += 1;
+				for (expr.atom.text[1..expr.atom.text.len-1]) |char| {
+					buffer[i] = char;
+				}
+				const ptr = self.static.items.len;
+				self.static.append(buffer)
+					catch unreachable;
+				return ptr*8 | reifStr;
+			}
 			const sym = self.current_symbol | reifSym;
 			self.current_symbol += 1;
 			self.forward.put(expr.atom.text, sym)
