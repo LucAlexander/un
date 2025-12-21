@@ -1976,18 +1976,13 @@ const Program = struct {
 		context.await_cores();
 		context.deinit();
 		if (std.mem.eql(u8, vm_target.text, "vm")){
-			const return_value = vm.?.cores[0].reg[1];
 			const loc = self.mem.create(Expr)
-				catch unreachable;
-			const buf = self.mem.alloc(u8, 20)
-				catch unreachable;
-			const slice = std.fmt.bufPrint(buf, "{}", .{return_value})
 				catch unreachable;
 			loc.* = Expr{
 				.atom = Token{
 					.pos=0,
 					.tag=.NUM,
-					.text=slice
+					.text=self.mem.dupe(u8, "0") catch unreachable
 				}
 			};
 			return loc;
