@@ -1117,6 +1117,20 @@ pub fn int(vm: *VM, core: *Core, _: *align(1) u64) bool {
 		}
 		return false;
 	}
+	if (core.reg[r0] == 1){
+		const addr = core.reg[r1] >> 3;
+		const n = vm.memory.words[addr];
+		var i:u64 = 1;
+		while (i <= n){
+			std.debug.print("{c}", .{@as(u8, (@truncate(vm.memory.words[addr+1])))});
+			i += 1;
+		}
+		return true;
+	}
+	if (core.reg[r0] == 2){
+		//TODO fork
+		return true;
+	}
 	return true;
 }
 
@@ -1957,3 +1971,4 @@ pub fn with(config:Config, bytecode: []u8, start: u64) void {
 
 //TODO decoder
 //TODO debugger
+//TODO all of the interrupts
