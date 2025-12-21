@@ -1172,7 +1172,7 @@ const Program = struct {
 				.REIF => {
 					const large = std.fmt.parseInt(u64, expr.list.items[2].atom.text, 16)
 						catch unreachable;
-					for (0..8) |bibyte| {
+					for (0..8) |byte| {
 						var loc = self.mem.create(Expr)
 							catch unreachable;
 						loc.* = Expr{
@@ -1194,7 +1194,7 @@ const Program = struct {
 							catch unreachable;
 						const buf = self.mem.alloc(u8, 8)
 							catch unreachable;
-						const slice = std.fmt.bufPrint(buf, "{x}", .{(large >> @truncate(bibyte*8))&0xffff})
+						const slice = std.fmt.bufPrint(buf, "{x}", .{(large >> @truncate(byte*8))&0xff})
 							catch unreachable;
 						segment.* = Expr{
 							.atom = Token{
@@ -1951,6 +1951,14 @@ const Program = struct {
 		}
 		var error_buffer = Buffer(ir.Error).init(self.mem.*);
 		const bytecode = ir.assemble_bytecode(self.mem, repr.parsed.items, &error_buffer) catch unreachable;
+		if (debug){
+			for (bytecode, 0..) |byte, i| {
+				std.debug.print("{x:02} ", .{byte});
+				if (i % 4 == 3){
+					std.debug.print("\n", .{});
+				}
+			}
+		}
 		var offset:u64 = 0;
 		for (repr.reif.static.items) |reif_byte_segment| {
 			const reif_bytes = std.mem.bytesAsSlice(u8, reif_byte_segment[0..]);
