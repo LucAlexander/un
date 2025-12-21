@@ -26,6 +26,7 @@ const TOKEN = enum(u64) {
 	UID,
 	REG,
 	LABEL,
+	REIF,
 	MOV,
 	ADD, SUB, MUL, DIV, MOD,
 	UADD, USUB, UMUL, UDIV, UMOD,
@@ -117,6 +118,9 @@ pub fn get_contents(mem: *const std.mem.Allocator, filename: []u8) ![]u8 {
 
 pub fn show_token(token: Token) void {
 	std.debug.print("{s} ", .{token.text});
+	if (token.tag == .NUM){
+		std.debug.print("[numeric] ", .{});
+	}
 	if (token.tag == .REG0){
 		std.debug.print("[{}] ", .{token.tag});
 	}
@@ -252,6 +256,7 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	keywords.put("comp", .COMP) catch unreachable;
 	keywords.put("reg", .REG) catch unreachable;
 	keywords.put("label", .LABEL) catch unreachable;
+	keywords.put("reif", .REIF) catch unreachable;
 	keywords.put("mov", .MOV) catch unreachable;
 	keywords.put("add", .ADD) catch unreachable;
 	keywords.put("sub", .SUB) catch unreachable;
@@ -318,7 +323,7 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 				c = text[i];
 			}
 			token.text = text[start .. i];
-			_ = std.fmt.parseInt(u16, token.text, 16) catch {
+			_ = std.fmt.parseInt(u64, token.text, 16) catch {
 				if (keywords.get(token.text)) |tag| {
 					token.tag = tag;
 				}
@@ -595,7 +600,15 @@ const Program = struct {
 				return null;
 			}
 			if (inst.list.items[0].* == .list){
-				return null;
+				const flattened = self.normalize(normalized, reif, inst, false);
+				if (flattened) |flat| {
+					normalized.append(flat)
+						catch unreachable;
+				}
+				else{
+					return null;
+				}
+				continue;
 			}
 			switch (inst.list.items[0].atom.tag){
 				.REG, .LABEL => {
@@ -608,6 +621,31 @@ const Program = struct {
 						continue;
 					}
 					return null;
+				},
+				.REIF => {
+					if (inst.list.items.len != 3){
+						return null;
+					}
+					if (self.expect_register(normalized, reif, &inst.list.items[1])){
+						const adr = reif.add_relation(inst.list.items[2]);
+						const buf = self.mem.alloc(u8, 20)
+							catch unreachable;
+						const s = std.fmt.bufPrint(buf, "{x}", .{adr})
+							catch unreachable;
+						const loc = self.mem.create(Expr)
+							catch unreachable;
+						loc.* = Expr{
+							.atom = Token{
+								.pos = 0,
+								.text = s,
+								.tag = .NUM
+							}
+						};
+						inst.list.items[2] = loc;
+						normalized.append(inst)
+							catch unreachable;
+						continue;
+					}
 				},
 				.MOV => {
 					if (inst.list.items.len != 3){
@@ -629,26 +667,6 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
-						if (inst.list.items[2].* == .list){
-							const adr = reif.add_relation(inst.list.items[2]);
-							const buf = self.mem.alloc(u8, 20)
-								catch unreachable;
-							const s = std.fmt.bufPrint(buf, "{d}", .{adr})
-								catch unreachable;
-							const loc = self.mem.create(Expr)
-								catch unreachable;
-							loc.* = Expr{
-								.atom = Token{
-									.pos = 0,
-									.text = s,
-									.tag = .NUM
-								}
-							};
-							inst.list.items[2] = loc;
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
 					}
 					if (self.expect_dregister(normalized, reif, inst.list.items[1])){
 						if (self.expect_dregister(normalized, reif, inst.list.items[2])){
@@ -662,26 +680,6 @@ const Program = struct {
 							continue;
 						}
 						if (self.expect_token(normalized, reif, &inst.list.items[2])){
-							normalized.append(inst)
-								catch unreachable;
-							continue;
-						}
-						if (inst.list.items[2].* == .list){
-							const adr = reif.add_relation(inst.list.items[2]);
-							const buf = self.mem.alloc(u8, 20)
-								catch unreachable;
-							const s = std.fmt.bufPrint(buf, "{d}", .{adr})
-								catch unreachable;
-							const loc = self.mem.create(Expr)
-								catch unreachable;
-							loc.* = Expr{
-								.atom = Token{
-									.pos = 0,
-									.text = s,
-									.tag = .NUM
-								}
-							};
-							inst.list.items[2] = loc;
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -765,17 +763,17 @@ const Program = struct {
 
 	pub fn parse_ir(self: *Program, programexpr: *Expr) ?ReifableRepr {
 		if (programexpr.* == .atom){
+			std.debug.print("cannot parse atom {s}\n", .{programexpr.atom.text});
 			return null;
 		}
 		if (programexpr.list.items.len == 0){
+			std.debug.print("cannot parse empty expression\n", .{});
 			return null;
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		var reif = Reif.init(self.mem);
 		if (self.normalize(&normalized, &reif, programexpr, true) == null){
-			if (debug){
-				std.debug.print("Failed normalization parse\n", .{});
-			}
+			std.debug.print("Failed normalization parse\n", .{});
 			return null;
 		}
 		if (debug){
@@ -931,6 +929,7 @@ const Program = struct {
 							continue;
 						}
 					}
+					std.debug.print("Invalid mov args\n", .{});
 					return null;
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
@@ -953,6 +952,7 @@ const Program = struct {
 							}
 						}
 					}
+					std.debug.print("Invalid binary alu args for instruction {s}\n", .{expr.list.items[0].atom.text});
 					return null;
 				},
 				.NOT, .COM => {
@@ -972,6 +972,7 @@ const Program = struct {
 							continue;
 						}
 					}
+					std.debug.print("Invalid unary alu args\n", .{});
 					return null;
 				},
 				.CMP => {
@@ -991,6 +992,7 @@ const Program = struct {
 							continue;
 						}
 					}
+					std.debug.print("Invalid compare args\n", .{});
 					return null;
 				},
 				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE => {
@@ -1005,6 +1007,7 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Invalid jump args\n", .{});
 					return null;
 				},
 				.CALL => {
@@ -1019,6 +1022,7 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Invalid call args\n", .{});
 					return null;
 				},
 				.RET => {
@@ -1033,6 +1037,7 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Invalid return args\n", .{});
 					return null;
 				},
 				.PSH => {
@@ -1047,6 +1052,7 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Invalid push args\n", .{});
 					return null;
 				},
 				.POP => {
@@ -1061,6 +1067,7 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Invalid pop args\n", .{});
 					return null;
 				},
 				.INT => {
@@ -1073,6 +1080,7 @@ const Program = struct {
 					continue;
 				},
 				else => {
+					std.debug.print("Invalid opcode\n", .{});
 					return null;
 				}
 			}
@@ -1161,6 +1169,92 @@ const Program = struct {
 			std.debug.assert(expr.* == .list);
 			std.debug.assert(expr.list.items[0].* == .atom);
 			switch(expr.list.items[0].atom.tag){
+				.REIF => {
+					const large = std.fmt.parseInt(u64, expr.list.items[2].atom.text, 16)
+						catch unreachable;
+					for (0..8) |bibyte| {
+						var loc = self.mem.create(Expr)
+							catch unreachable;
+						loc.* = Expr{
+							.list = Buffer(*Expr).init(self.mem.*)
+						};
+						var op = self.mem.create(Expr)
+							catch unreachable;
+						op.* = Expr{
+							.atom = Token{
+								.pos = 0,
+								.tag=.OR,
+								.text=self.mem.dupe(u8, "or") catch unreachable
+							}
+						};
+						var reg = self.mem.create(Expr)
+							catch unreachable;
+						reg.* = expr.list.items[1].*;
+						var segment = self.mem.create(Expr)
+							catch unreachable;
+						const buf = self.mem.alloc(u8, 8)
+							catch unreachable;
+						const slice = std.fmt.bufPrint(buf, "{x}", .{(large >> @truncate(bibyte*8))&0xffff})
+							catch unreachable;
+						segment.* = Expr{
+							.atom = Token{
+								.pos = 0,
+								.tag=.NUM,
+								.text=slice
+							}
+						};
+						loc.list.append(op)
+							catch unreachable;
+						loc.list.append(reg)
+							catch unreachable;
+						loc.list.append(reg)
+							catch unreachable;
+						loc.list.append(segment)
+							catch unreachable;
+						normalized.insert(i, loc)
+							catch unreachable;
+						i += 1;
+						loc = self.mem.create(Expr)
+							catch unreachable;
+						loc.* = Expr{
+							.list = Buffer(*Expr).init(self.mem.*)
+						};
+						op = self.mem.create(Expr)
+							catch unreachable;
+						op.* = Expr{
+							.atom = Token{
+								.pos = 0,
+								.tag=.SHL,
+								.text=self.mem.dupe(u8, "shl") catch unreachable
+							}
+						};
+						reg = self.mem.create(Expr)
+							catch unreachable;
+						reg.* = expr.list.items[1].*;
+						segment = self.mem.create(Expr)
+							catch unreachable;
+						segment.* = Expr{
+							.atom = Token{
+								.pos = 0,
+								.tag=.NUM,
+								.text=self.mem.dupe(u8, "10")
+									catch unreachable
+							}
+						};
+						loc.list.append(op)
+							catch unreachable;
+						loc.list.append(reg)
+							catch unreachable;
+						loc.list.append(reg)
+							catch unreachable;
+						loc.list.append(segment)
+							catch unreachable;
+						normalized.insert(i, loc)
+							catch unreachable;
+						i += 1;
+					}
+					_ = normalized.orderedRemove(i);
+				},
 				.INT => {
 					std.debug.assert(expr.list.items.len < 5);
 					self.push_register(normalized, i, .REG2);
@@ -1757,6 +1851,9 @@ const Program = struct {
 				.LABEL => {
 					continue;
 				},
+				.REIF => {
+					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+				},
 				.MOV => {
 					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
@@ -1834,10 +1931,16 @@ const Program = struct {
 			}
 			return false;
 		}
+		if (expr.*.atom.tag == .STR){
+			return false;
+		}
 		return true;
 	}
 
 	pub fn evaluate(self: *Program, vm_target: Token, repr: ReifableRepr) *Expr {
+		if (debug){
+			std.debug.print("Evaluating\n", .{});
+		}
 		var vm = self.vm.get(vm_target.text);
 		if (vm == null){
 			vm = self.mem.create(ir.VM)
@@ -2304,7 +2407,7 @@ const Reif = struct {
 				const ptr = self.static.items.len;
 				self.static.append(buffer)
 					catch unreachable;
-				return ptr*8 | reifStr;
+				return (ptr*8) | reifStr;
 			}
 			const sym = self.current_symbol | reifSym;
 			self.current_symbol += 1;
