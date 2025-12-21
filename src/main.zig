@@ -65,11 +65,18 @@ pub fn main() !void {
 	}
 	if (std.mem.eql(u8, args[1], "-h")){
 		std.debug.print("Help Menu\n", .{});
-		std.debug.print("   -h                 :   Show this menu\n", .{});
-		std.debug.print("   [infile]           :   Run [infile]\n", .{});
+		std.debug.print("   -h                 : Show this menu\n", .{});
+		std.debug.print("   [infile]           : Run [infile]\n", .{});
+		std.debug.print("   [infile] [outfile] : Compile [infile] to [outfile]\n", .{});
 		return;
 	}
 	const filename = args[1];
+	var eval = true;
+	var outfilename = filename;
+	if (args.len == 3){
+		eval = false;
+		outfilename = args[2];
+	}
 	const contents = try get_contents(&mem, filename);
 	var error_log = Buffer(Error).init(mem);
 	const tokens = tokenize(&mem, contents, &error_log);
@@ -103,13 +110,54 @@ pub fn main() !void {
 		.pos = 0,
 		.tag=.IDEN
 	};
-	const val = program.compute(raw_expressions, default_target, &error_log) catch {
+	const val = program.compute(raw_expressions, default_target, &error_log, eval) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
 		}
 		return;
 	};
-	show_expr(val, 1);
+	if (!eval){
+		write_out(outfilename, val);
+	}
+}
+
+pub fn write_out(outfile: []u8, val: *Expr) void {
+	var out = std.fs.cwd().createFile(outfile, .{.truncate=true}) catch {
+		std.debug.print("Error creating file: {s}\n", .{outfile});
+		return;
+	};
+	defer out.close();
+	write_expr(out, val, 1);
+}
+
+pub fn write_expr(out:std.fs.File, expr: *Expr, depth: u64) void {
+	for (0..depth) |_| {
+		out.writer().print(" ", .{})
+			catch unreachable;
+	}
+	out.writer().print("( ", .{})
+		catch unreachable;
+	switch (expr.*){
+		.atom => {
+			out.writer().print("{s} ", .{expr.atom.text})
+				catch unreachable;
+		},
+		.list => {
+			for (expr.list.items) |sub| {
+				if (sub.* == .list){
+					out.writer().print("\n", .{})
+						catch unreachable;
+					write_expr(out, sub, depth+1);
+				}
+				else{
+					out.writer().print("{s} ", .{sub.atom.text})
+						catch unreachable;
+				}
+			}
+		}
+	}
+	out.writer().print(") ", .{})
+		catch unreachable;
 }
 
 pub fn get_contents(mem: *const std.mem.Allocator, filename: []u8) ![]u8 {
@@ -559,7 +607,7 @@ const Program = struct {
 		};
 	}
 
-	pub fn compute(self: *Program, program: Buffer(*Expr), vm_target: Token, err: *Buffer(Error)) ParseError!*Expr {
+	pub fn compute(self: *Program, program: Buffer(*Expr), vm_target: Token, err: *Buffer(Error), eval: bool) ParseError!*Expr {
 		var old_binds = self.binds.count();
 		while (true){
 			for (program.items) |expr| {
@@ -594,8 +642,10 @@ const Program = struct {
 						old_binds = self.binds.count();
 						continue;
 					}
-					if (self.parse_ir(candidate)) |repr| {
-						return self.evaluate(vm_target, repr);
+					if (eval){
+						if (self.parse_ir(candidate)) |repr| {
+							return self.evaluate(vm_target, repr);
+						}
 					}
 					return candidate;
 				}
@@ -2164,7 +2214,7 @@ const Program = struct {
 								catch unreachable;
 							return ParseError.UnexpectedToken;
 						}
-						return try self.compute(expr.list.items[2].list, expr.list.items[1].atom, err);
+						return try self.compute(expr.list.items[2].list, expr.list.items[1].atom, err, true);
 					}
 					if (expr.list.items[0].atom.tag == .UID){
 						if (expr.list.items.len != 3){
@@ -2290,7 +2340,7 @@ const Program = struct {
 								return wrapper;
 							}
 							const updated = try apply_args(self.mem, wrapper, bind, err);
-							return try self.compute(updated.list, vm_target, err);
+							return try self.compute(updated.list, vm_target, err, true);
 						},
 						.list => {
 							if (bind.expr.list.items.len == 0){
