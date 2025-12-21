@@ -58,7 +58,7 @@ pub fn main() !void {
 	defer main_mem.deinit();
 	const mem = main_mem.allocator();
 	var filename = Buffer(u8).init(mem);
-	filename.appendSlice("test2.un")
+	filename.appendSlice("hello.un")
 		catch unreachable;
 	const contents = try get_contents(&mem, filename.items);
 	var error_log = Buffer(Error).init(mem);
@@ -562,11 +562,13 @@ const Program = struct {
 					const candidate = try self.descend(expr, vm_target, err);
 					if (candidate.* == .list){
 						if (candidate.list.items.len == 4){
-							if (candidate.list.items[0].atom.tag == .BIND){
-								const bind = try expr_to_bind(self.mem, candidate, err);
-								self.binds.put(bind.name.text, bind)
-									catch unreachable;
-								continue;
+							if (candidate.list.items[0].* == .atom){
+								if (candidate.list.items[0].atom.tag == .BIND){
+									const bind = try expr_to_bind(self.mem, candidate, err);
+									self.binds.put(bind.name.text, bind)
+										catch unreachable;
+									continue;
+								}
 							}
 						}
 					}
@@ -2413,3 +2415,4 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	return new;
 }
 
+//TODO cli
