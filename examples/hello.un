@@ -1,0 +1,29 @@
+(bind untag (y) (
+	(uid (z) (
+		(reg z)
+		(mov z ffff)
+		(shl z z 8)
+		(or z z ff)
+		(shl z z 8)
+		(or z z ff)
+		(and y y z)))
+))
+
+(bind print (str) (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(mov x 1)
+		(reif y str)
+		(flat (untag y))
+		(int x y)))
+))
+
+(bind main () (
+	(flat (print "hello\n"))
+	(reg x)
+	(mov x 0)
+	(int x)
+))
+
+(main)
