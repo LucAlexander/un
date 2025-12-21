@@ -58,10 +58,19 @@ pub fn main() !void {
 	var main_mem = std.heap.ArenaAllocator.init(allocator);
 	defer main_mem.deinit();
 	const mem = main_mem.allocator();
-	var filename = Buffer(u8).init(mem);
-	filename.appendSlice("hello.un")
-		catch unreachable;
-	const contents = try get_contents(&mem, filename.items);
+	const args = try std.process.argsAlloc(mem);
+	if (args.len == 1){
+		std.debug.print("Pass -h for help\n", .{});
+		return;
+	}
+	if (std.mem.eql(u8, args[1], "-h")){
+		std.debug.print("Help Menu\n", .{});
+		std.debug.print("   -h                 :   Show this menu\n", .{});
+		std.debug.print("   [infile]           :   Run [infile]\n", .{});
+		return;
+	}
+	const filename = args[1];
+	const contents = try get_contents(&mem, filename);
 	var error_log = Buffer(Error).init(mem);
 	const tokens = tokenize(&mem, contents, &error_log);
 	if (error_log.items.len != 0){
@@ -70,8 +79,10 @@ pub fn main() !void {
 		}
 		return;
 	}
-	for (tokens.items) |token| {
-		show_token(token);
+	if (debug){
+		for (tokens.items) |token| {
+			show_token(token);
+		}
 	}
 	std.debug.print("\n", .{});
 	const raw_expressions = parse_program(&mem, tokens.items, &error_log) catch {
@@ -80,8 +91,10 @@ pub fn main() !void {
 		}
 		return;
 	};
-	for (raw_expressions.items) |expr| {
-		show_expr(expr, 1);
+	if (debug){
+		for (raw_expressions.items) |expr| {
+			show_expr(expr, 1);
+		}
 	}
 	std.debug.print("\n", .{});
 	var program = Program.init(&mem);
