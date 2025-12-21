@@ -1377,7 +1377,7 @@ pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		const n = vm.memory.words[addr];
 		var i:u64 = 1;
 		while (i <= n){
-			std.debug.print("{c}", .{@as(u8, (@truncate(vm.memory.words[addr+1])))});
+			std.debug.print("{c}", .{@as(u8, (@truncate(vm.memory.words[addr+i])))});
 			i += 1;
 		}
 		ip.* += 1;

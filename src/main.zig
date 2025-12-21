@@ -1961,7 +1961,20 @@ const Program = struct {
 		}
 		var offset:u64 = 0;
 		for (repr.reif.static.items) |reif_byte_segment| {
-			const reif_bytes = std.mem.bytesAsSlice(u8, reif_byte_segment[0..]);
+			const reif_bytes = self.mem.alloc(u8, reif_byte_segment.len*8)
+				catch unreachable;
+			var i: u64 = 0;
+			for (reif_byte_segment) |b| {
+				reif_bytes[i] = @as(u8, @truncate(b));
+				reif_bytes[i+1] = @as(u8, @truncate(b >> 0x8));
+				reif_bytes[i+2] = @as(u8, @truncate(b >> 0x10));
+				reif_bytes[i+3] = @as(u8, @truncate(b >> 0x18));
+				reif_bytes[i+4] = @as(u8, @truncate(b >> 0x20));
+				reif_bytes[i+5] = @as(u8, @truncate(b >> 0x28));
+				reif_bytes[i+6] = @as(u8, @truncate(b >> 0x30));
+				reif_bytes[i+7] = @as(u8, @truncate(b >> 0x38));
+				i += 8;
+			}
 			vm.?.load_bytes(offset, reif_bytes);
 			offset += reif_bytes.len;
 		}
@@ -2423,6 +2436,7 @@ const Reif = struct {
 				i += 1;
 				for (expr.atom.text[1..expr.atom.text.len-1]) |char| {
 					buffer[i] = char;
+					i += 1;
 				}
 				const ptr = self.static.items.len;
 				self.static.append(buffer)
