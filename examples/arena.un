@@ -1,0 +1,32 @@
+(bind arena (adr size) (
+	(uid (x) (
+		(reg x)
+		(mov x adr)
+		(psh x)
+		(psh x)
+		(mov x size)
+		(add x x adr)
+		(psh x)
+		(mov x sp)
+		(x)
+	))
+))
+
+(bind alloc (arena size) (
+	(uid (ptr val bound end) (
+		(reg ptr)
+		(reg val)
+		(reg bound)
+		(add ptr arena 8)
+		(mov val (at ptr))
+		(add val val size)
+		(add bound arena 10)
+		(mov bound (at bound))
+		(cmp val bound)
+		(jlt end)
+		(mov val 0)
+		(label end)
+		(mov (at ptr) val)
+		(val)
+	))
+))
