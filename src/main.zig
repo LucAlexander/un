@@ -1771,16 +1771,16 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = self.mem.dupe(u8, "fp") catch unreachable,
+						.text = self.mem.dupe(u8, "r3") catch unreachable,
 						.pos = 0,
-						.tag = .FPTR
+						.tag = .REG3
 					}
 				};
 				src = self.mem.create(Expr)
 					catch unreachable;
 				const buffer = self.mem.alloc(u8, 20)
 					catch unreachable;
-				const slice = std.fmt.bufPrint(buffer, "{}", .{offset})
+				const slice = std.fmt.bufPrint(buffer, "{x}", .{offset})
 					catch unreachable;
 				src.* = Expr{
 					.atom = Token{
@@ -1844,11 +1844,11 @@ const Program = struct {
 					catch unreachable;
 				loc.list.append(src)
 					catch unreachable;
-				normalized.insert(i.*, load)
+				normalized.insert(i.*, loc)
 					catch unreachable;
 				normalized.insert(i.*, off)
 					catch unreachable;
-				normalized.insert(i.*, loc)
+				normalized.insert(i.*, load)
 					catch unreachable;
 				expr.atom.tag = .REG3;
 				i.* += 3;
