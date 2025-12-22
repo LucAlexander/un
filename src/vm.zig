@@ -231,13 +231,13 @@ pub fn mov_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_rdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	const inst = vm.memory.half_words[ip.*];
 	if (debug){
-		std.debug.print("inst \n", .{});
+		std.debug.print("mov_rdr\n", .{});
 	}
+	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
-	core.reg[dst] = vm.memory.words[core.reg[src]];
+	core.reg[dst] = vm.memory.words[core.reg[src] >> 3];
 	ip.* += 1;
 	return true;
 }
@@ -273,7 +273,7 @@ pub fn mov_drdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
-	vm.memory.words[core.reg[dst]] = vm.memory.words[core.reg[src]];
+	vm.memory.words[core.reg[dst]] = vm.memory.words[core.reg[src] >> 3];
 	ip.* += 1;
 	return true;
 }

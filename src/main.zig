@@ -197,6 +197,9 @@ pub fn show_token(token: Token) void {
 	if (token.tag == .FPTR){
 		std.debug.print("[{}] ", .{token.tag});
 	}
+	if (token.tag == .SPTR){
+		std.debug.print("[{}] ", .{token.tag});
+	}
 }
 
 pub fn show_expr(expr: *Expr, depth: u64) void {
@@ -384,10 +387,13 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 				c = text[i];
 			}
 			token.text = text[start .. i];
+			if (keywords.get(token.text)) |tag| {
+				token.tag = tag;
+				tokens.append(token)
+					catch unreachable;
+				continue;
+			}
 			_ = std.fmt.parseInt(u64, token.text, 16) catch {
-				if (keywords.get(token.text)) |tag| {
-					token.tag = tag;
-				}
 				tokens.append(token)
 					catch unreachable;
 				continue;
@@ -624,6 +630,23 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
+						else if (expr.list.items[0].atom.tag == .USE){
+							const subprogram = try self.descend(expr, vm_target, err);
+							std.debug.assert(subprogram.* == .list);
+							for (subprogram.list.items) |subexpr| {
+								if (subexpr.* == .list){
+									if (subexpr.list.items.len != 0){
+										if (subexpr.list.items[0].atom.tag == .BIND){
+											const bind = try expr_to_bind(self.mem, subexpr, err);
+											self.binds.put(bind.name.text, bind)
+												catch unreachable;
+											continue;
+										}
+									}
+								}
+							}
+							continue;
+						}
 					}
 					const candidate = try self.descend(expr, vm_target, err);
 					if (candidate.* == .list){
@@ -660,15 +683,17 @@ const Program = struct {
 		}
 		for (expr.list.items[0..limit]) |inst| {
 			if (inst.* == .atom){
+				std.debug.print("atom in execution block\n", .{});
 				return null;
 			}
 			if (inst.list.items[0].* == .list){
-				const flattened = self.normalize(normalized, reif, inst, false);
+				const flattened = self.normalize(normalized, reif, inst, true);
 				if (flattened) |flat| {
 					normalized.append(flat)
 						catch unreachable;
 				}
 				else{
+					std.debug.print("could not flatten nested block\n", .{});
 					return null;
 				}
 				continue;
@@ -676,6 +701,7 @@ const Program = struct {
 			switch (inst.list.items[0].atom.tag){
 				.REG, .LABEL => {
 					if (inst.list.items.len != 2){
+						std.debug.print("Expected 1 argument for reg or label\n", .{});
 						return null;
 					}
 					if (self.expect_token(normalized, reif, &inst.list.items[1])){
@@ -683,10 +709,12 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Expected token for reg or label\n", .{});
 					return null;
 				},
 				.REIF => {
 					if (inst.list.items.len != 3){
+						std.debug.print("Expected 2 arguments for reif\n", .{});
 						return null;
 					}
 					if (self.expect_register(normalized, reif, &inst.list.items[1])){
@@ -712,6 +740,7 @@ const Program = struct {
 				},
 				.MOV => {
 					if (inst.list.items.len != 3){
+						std.debug.print("Expected 2 arguments for mov\n", .{});
 						return null;
 					}
 					if (self.expect_register(normalized, reif, &inst.list.items[1])){
@@ -730,6 +759,8 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
+						std.debug.print("mov unable to match second argument\n", .{});
+						return null;
 					}
 					if (self.expect_dregister(normalized, reif, inst.list.items[1])){
 						if (self.expect_dregister(normalized, reif, inst.list.items[2])){
@@ -747,11 +778,15 @@ const Program = struct {
 								catch unreachable;
 							continue;
 						}
+						std.debug.print("mov unable to match second argument\n", .{});
+						return null;
 					}
+					std.debug.print("mov unable to match first argument\n", .{});
 					return null;
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
 					if (inst.list.items.len != 4){
+						std.debug.print("Expected 3 arguments for binary alu operation\n", .{});
 						return null;
 					}
 					if (self.expect_register(normalized, reif, &inst.list.items[1])){
@@ -763,10 +798,12 @@ const Program = struct {
 							}
 						}
 					}
+					std.debug.print("Unable to match arguments on binary alu operation\n", .{});
 					return null;
 				},
 				.NOT, .COM, .CMP=> {
-					if (inst.list.items.len != 2){
+					if (inst.list.items.len != 3){
+						std.debug.print("Expected 2 arguments for unary alu operation\n", .{});
 						return null;
 					}
 					if (self.expect_register(normalized, reif, &inst.list.items[1])){
@@ -776,10 +813,12 @@ const Program = struct {
 							continue;
 						}
 					}
+					std.debug.print("Unable to match arguments on unary alu operation\n", .{});
 					return null;
 				},
 				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .CALL => {
 					if (inst.list.items.len != 2){
+						std.debug.print("jump or call expected target\n", .{});
 						return null;
 					}
 					if (self.expect_token(normalized, reif, &inst.list.items[1])){
@@ -787,10 +826,12 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Unable to match argument for jump or call\n", .{});
 					return null;
 				},
 				.RET => {
 					if (inst.list.items.len != 2){
+						std.debug.print("Expected argument for ret\n", .{});
 						return null;
 					}
 					if (self.expect_alu_arg(normalized, reif, &inst.list.items[1])){
@@ -798,10 +839,12 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Unable to match argument for ret\n", .{});
 					return null;
 				},
 				.PSH, .POP => {
 					if (inst.list.items.len != 2){
+						std.debug.print("Expected argument for push or pop\n", .{});
 						return null;
 					}
 					if (self.expect_register(normalized, reif, &inst.list.items[1])){
@@ -809,6 +852,7 @@ const Program = struct {
 							catch unreachable;
 						continue;
 					}
+					std.debug.print("Unable to match argument for push or pop\n", .{});
 					return null;
 				},
 				.INT => {
@@ -817,11 +861,12 @@ const Program = struct {
 					continue;
 				},
 				else => {
+					std.debug.print("Unknown opcode {s}\n", .{inst.list.items[0].atom.text});
 					return null;
 				}
 			}
 		}
-		return expr.list.items[expr.list.items.len-1];
+		return expr.list.items[expr.list.items.len-1].list.items[0];
 	}
 
 	pub fn parse_ir(self: *Program, programexpr: *Expr) ?ReifableRepr {
@@ -832,6 +877,10 @@ const Program = struct {
 		if (programexpr.list.items.len == 0){
 			std.debug.print("cannot parse empty expression\n", .{});
 			return null;
+		}
+		if (debug){
+			std.debug.print("Normalizing target: \n", .{});
+			show_expr(programexpr, 1);
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		var reif = Reif.init(self.mem);
@@ -1656,6 +1705,14 @@ const Program = struct {
 			}
 			return;
 		}
+		if (std.mem.eql(u8, expr.atom.text, "sp")){
+			expr.atom.tag = .SPTR;
+			return;
+		}
+		if (std.mem.eql(u8, expr.atom.text, "fp")){
+			expr.atom.tag = .FPTR;
+			return;
+		}
 		if (regmap.get(expr.atom.text)) |old| {
 			if (vacated.get(expr.atom.text)) |offset| {
 				var load = self.mem.create(Expr)
@@ -1698,6 +1755,9 @@ const Program = struct {
 					catch unreachable;
 				var off = self.mem.create(Expr)
 					catch unreachable;
+				off.* = Expr{
+					.list = Buffer(*Expr).init(self.mem.*)
+				};
 				op = self.mem.create(Expr)
 					catch unreachable;
 				op.* = Expr{
@@ -1739,6 +1799,9 @@ const Program = struct {
 					catch unreachable;
 				var loc = self.mem.create(Expr)
 					catch unreachable;
+				loc.* = Expr{
+					.list = Buffer(*Expr).init(self.mem.*)
+				};
 				op = self.mem.create(Expr)
 					catch unreachable;
 				op.* = Expr{
@@ -1986,9 +2049,6 @@ const Program = struct {
 	pub fn expect_token(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: **Expr) bool {
 		if (expr.*.* == .list){
 			if (self.normalize(normalized, reif, expr.*, false)) |norm| {
-				if (norm.* == .list){
-					return false;
-				}
 				expr.* = norm;
 				return true;
 			}
@@ -2615,4 +2675,4 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	return new;
 }
 
-//TODO cli
+//TODO jumps are absolute, should be relative
