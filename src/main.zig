@@ -1212,17 +1212,34 @@ const Program = struct {
 				.JMP, .JEQ, .JNE, .JLE, .JGE, .JLT, .JGT, .CALL => {
 					if (chainmap.getPtr(expr.list.items[1].atom.text)) |link| {
 						if (link.* == .waiting){
+							expr.list.items[1].atom.pos = i;
 							link.waiting.append(&expr.list.items[1])
 								catch unreachable;
 						}
 						else if (link.* == .fulfilled){
-							expr.list.items[1] = link.fulfilled;
+							const offset:i16 = @bitCast(@as(u16, @truncate(link.fulfilled.atom.pos)));
+							const current: i16 = @bitCast(@as(u16, @truncate(i)));
+							const buf = self.mem.alloc(u8, 20)
+								catch unreachable;
+							const slice = std.fmt.bufPrint(buf, "{x}", .{@as(u16, @bitCast(current -% offset))})
+								catch unreachable;
+							const loc = self.mem.create(Expr)
+								catch unreachable;
+							loc.* = Expr{
+								.atom=Token{
+									.pos = i,
+									.text = slice,
+									.tag=.NUM,
+								},
+							};
+							expr.list.items[1] = loc;
 						}
 					}
 					else{
 						var newchain = LabelChain{
 							.waiting = Buffer(**Expr).init(self.mem.*)
 						};
+						expr.list.items[1].atom.pos = i;
 						newchain.waiting.append(&expr.list.items[1])
 							catch unreachable;
 						chainmap.put(expr.list.items[1].atom.text, newchain)
@@ -1234,13 +1251,13 @@ const Program = struct {
 				.LABEL => {
 					const buf = self.mem.alloc(u8, 20)
 						catch unreachable;
-					const slice = std.fmt.bufPrint(buf, "{}", .{i})
+					const slice = std.fmt.bufPrint(buf, "{x}", .{i})
 						catch unreachable;
 					const replacement = self.mem.create(Expr)
 						catch unreachable;
 					replacement.* = Expr{
 						.atom = Token{
-							.pos = 0,
+							.pos = i,
 							.text = slice,
 							.tag = .NUM
 						}
@@ -1248,7 +1265,22 @@ const Program = struct {
 					if (chainmap.get(expr.list.items[1].atom.text)) |link| {
 						if (link == .waiting){
 							for (link.waiting.items) |entry| {
-								entry.* = replacement;
+								const replacebuf = self.mem.alloc(u8, 20)
+									catch unreachable;
+								const offset:i16 = @bitCast(@as(u16, @truncate(entry.*.atom.pos)));
+								const current: i16 = @bitCast(@as(u16, @truncate(i)));
+								std.debug.print("{} {}\n", .{offset, current});
+								const replaceslice = std.fmt.bufPrint(replacebuf, "{x}", .{@as(u16, @bitCast(current-%offset))})
+									catch unreachable;
+								entry.* = self.mem.create(Expr)
+									catch unreachable;
+								entry.*.* = Expr{
+									.atom = Token{
+										.pos = i,
+										.text = replaceslice,
+										.tag = .NUM
+									}
+								};
 							}
 						}
 					}
@@ -1764,7 +1796,7 @@ const Program = struct {
 					.atom = Token{
 						.text = self.mem.dupe(u8, "sub") catch unreachable,
 						.pos = 0,
-						.tag = .MOV
+						.tag = .SUB
 					}
 				};
 				dest = self.mem.create(Expr)
@@ -2674,5 +2706,3 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	internal_uid = new;
 	return new;
 }
-
-//TODO jumps are absolute, should be relative
