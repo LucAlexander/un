@@ -693,6 +693,9 @@ const Program = struct {
 				std.debug.print("atom in execution block\n", .{});
 				return null;
 			}
+			if (inst.list.items.len == 0){
+				continue;
+			}
 			if (inst.list.items[0].* == .list){
 				const flattened = self.normalize(normalized, reif, inst, true);
 				if (flattened) |flat| {
