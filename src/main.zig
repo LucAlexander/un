@@ -613,6 +613,25 @@ const Program = struct {
 		};
 	}
 
+	pub fn flatten_use(self: *Program, vm_target: Token, subprogram: *Expr, err: *Buffer(Error)) ParseError!void {
+		std.debug.assert(subprogram.* == .list);
+		for (subprogram.list.items) |subexpr| {
+			if (subexpr.* == .list){
+				if (subexpr.list.items.len != 0){
+					if (subexpr.list.items[0].atom.tag == .BIND){
+						const bind = try expr_to_bind(self.mem, subexpr, err);
+						self.binds.put(bind.name.text, bind)
+							catch unreachable;
+					}
+					else if (subexpr.list.items[0].atom.tag == .USE){
+						const sub = try self.descend(subexpr, vm_target, err);
+						try self.flatten_use(vm_target, sub, err);
+					}
+				}
+			}
+		}
+	}
+
 	pub fn compute(self: *Program, program: Buffer(*Expr), vm_target: Token, err: *Buffer(Error), eval: bool) ParseError!*Expr {
 		var old_binds = self.binds.count();
 		while (true){
@@ -632,19 +651,7 @@ const Program = struct {
 						}
 						else if (expr.list.items[0].atom.tag == .USE){
 							const subprogram = try self.descend(expr, vm_target, err);
-							std.debug.assert(subprogram.* == .list);
-							for (subprogram.list.items) |subexpr| {
-								if (subexpr.* == .list){
-									if (subexpr.list.items.len != 0){
-										if (subexpr.list.items[0].atom.tag == .BIND){
-											const bind = try expr_to_bind(self.mem, subexpr, err);
-											self.binds.put(bind.name.text, bind)
-												catch unreachable;
-											continue;
-										}
-									}
-								}
-							}
+							try self.flatten_use(vm_target, subprogram, err);
 							continue;
 						}
 					}
