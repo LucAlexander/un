@@ -215,7 +215,7 @@ pub const VM = struct {
 				while (top > bottom){
 					stdout.print("                                                      ", .{}) catch unreachable;
 					var issp = false;
-					if (top+1 == core_ptr.reg[rsp]){
+					if (top-7 == core_ptr.reg[rsp]){
 						stdout.print("\x1b[1;33m", .{}) catch unreachable;
 						issp = true;
 					}
@@ -1425,7 +1425,6 @@ pub fn psh_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[rsp] = core.reg[rfp];
 	core.reg[rsp] -= 8;
 	vm.memory.words[core.reg[rsp] >> 3] = core.reg[reg];
 	ip.* += 1;
@@ -1438,7 +1437,6 @@ pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[rsp] = core.reg[rfp];
 	core.reg[reg] = vm.memory.words[core.reg[rsp] >> 3];
 	core.reg[rsp] += 8;
 	ip.* += 1;
