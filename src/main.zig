@@ -1397,6 +1397,9 @@ const Program = struct {
 						normalized.insert(i, loc)
 							catch unreachable;
 						i += 1;
+						if (byte == 7){
+							break;
+						}
 						loc = self.mem.create(Expr)
 							catch unreachable;
 						loc.* = Expr{
