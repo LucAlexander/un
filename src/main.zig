@@ -2199,19 +2199,23 @@ const Program = struct {
 				},
 				.REIF => {
 					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					self.write_back(normalized, &i);
 				},
 				.MOV => {
 					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
+					self.write_back(normalized, &i);
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
 					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
 					self.color_register(normalized, &i, expr.list.items[3], &regmap, &q, &vacated);
+					self.write_back(normalized, &i);
 				},
 				.NOT, .COM, .CMP => {
 					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
+					self.write_back(normalized, &i);
 				},
 				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .CALL, => {
 					continue;
@@ -2226,6 +2230,7 @@ const Program = struct {
 				.POP => {
 					stack_position -= 8;
 					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					self.write_back(normalized, &i);
 				},
 				.INT => {
 					var k: u64 = 1;
@@ -2239,6 +2244,68 @@ const Program = struct {
 				}
 			}
 		}
+	}
+
+	pub fn write_back(self: *Program, normalized: *Buffer(*Expr), i: *u64) void {
+		const loc = self.mem.create(Expr)
+			catch unreachable;
+		loc.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		const left = self.mem.create(Expr)
+			catch unreachable;
+		left.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r10") catch unreachable,
+				.pos = 0,
+				.tag = .REG10
+			}
+		};
+		const src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		const at = self.mem.create(Expr)
+			catch unreachable;
+		at.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "at") catch unreachable,
+				.pos = 0,
+				.tag = .AT
+			}
+		};
+		left.list.append(at)
+			catch unreachable;
+		left.list.append(dest)
+			catch unreachable;
+		loc.list.append(op)
+			catch unreachable;
+		loc.list.append(left)
+			catch unreachable;
+		loc.list.append(src)
+			catch unreachable;
+		normalized.insert(i.*+1, loc)
+			catch unreachable;
+		i.* += 1;
 	}
 
 	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: **Expr) bool {
