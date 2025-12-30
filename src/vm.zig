@@ -2,6 +2,7 @@ const std = @import("std");
 const Buffer = std.ArrayList;
 
 const debug = true;
+const debugger = true;
 
 pub const Config = struct {
 	screen_width: u64,
@@ -203,6 +204,75 @@ pub const VM = struct {
 			int
 		};
 		while (running){
+			if (debugger){
+				const stdout = std.io.getStdOut().writer();
+				stdout.print("\x1b[2J\x1b[H", .{}) catch unreachable;
+				const bottom = core_ptr.reg[rsp]-8;
+				var top = bottom + 8*16;
+				if (top > vm.memory.mem.len){
+					top = vm.memory.mem.len-1;
+				}
+				while (top > bottom){
+					stdout.print("                                                      ", .{}) catch unreachable;
+					var issp = false;
+					if (top+1 == core_ptr.reg[rsp]){
+						stdout.print("\x1b[1;33m", .{}) catch unreachable;
+						issp = true;
+					}
+					for (0..8) |_| {
+						stdout.print("{x:02} ", .{vm.memory.mem[top]}) catch unreachable;
+						top -= 1;
+					}
+					if (issp){
+						stdout.print("\x1b[0m", .{}) catch unreachable;
+					}
+					stdout.print("\n", .{}) catch unreachable;
+				}
+				stdout.print("\x1b[H", .{}) catch unreachable;
+				const ip_addr = ip.* << 2;
+				var begin:u64 = 0;
+				if (ip_addr > 4){
+					begin = ip_addr - 4*4;
+				}
+				const end = begin + 4*16;
+				while (begin < end){
+					stdout.print("                                ", .{}) catch unreachable;
+					var isip = false;
+					if (begin == ip_addr){
+						stdout.print("\x1b[1;31m", .{}) catch unreachable;
+						isip = true;
+					}
+					for (0..4) |_| {
+						stdout.print("{x:02} ", .{vm.memory.mem[begin]}) catch unreachable;
+						begin += 1;
+					}
+					if (isip){
+						stdout.print("\x1b[0m", .{}) catch unreachable;
+					}
+					stdout.print("\n", .{}) catch unreachable;
+				}
+				stdout.print("\x1b[H", .{}) catch unreachable;
+				stdout.print("r0  : {x:016}\n", .{core_ptr.reg[r0]}) catch unreachable;
+				stdout.print("r1  : {x:016}\n", .{core_ptr.reg[r1]}) catch unreachable;
+				stdout.print("r2  : {x:016}\n", .{core_ptr.reg[r2]}) catch unreachable;
+				stdout.print("r3  : {x:016}\n", .{core_ptr.reg[r3]}) catch unreachable;
+				stdout.print("r4  : {x:016}\n", .{core_ptr.reg[r4]}) catch unreachable;
+				stdout.print("r5  : {x:016}\n", .{core_ptr.reg[r5]}) catch unreachable;
+				stdout.print("r6  : {x:016}\n", .{core_ptr.reg[r6]}) catch unreachable;
+				stdout.print("r7  : {x:016}\n", .{core_ptr.reg[r7]}) catch unreachable;
+				stdout.print("r8  : {x:016}\n", .{core_ptr.reg[r8]}) catch unreachable;
+				stdout.print("r9  : {x:016}\n", .{core_ptr.reg[r9]}) catch unreachable;
+				stdout.print("r10 : {x:016}\n", .{core_ptr.reg[r10]}) catch unreachable;
+				stdout.print("r11 : {x:016}\n", .{core_ptr.reg[r11]}) catch unreachable;
+				stdout.print("fp  : {x:016}\n", .{core_ptr.reg[rfp]}) catch unreachable;
+				stdout.print("\x1b[1;33msp  : {x:016}\x1b[0m\n", .{core_ptr.reg[rsp]}) catch unreachable;
+				stdout.print("sr  : {x:016}\n", .{core_ptr.reg[rsr]}) catch unreachable;
+				stdout.print("\x1b[1;31mip  : {x:016}\x1b[0m\n", .{core_ptr.reg[rip]}) catch unreachable;
+				var stdin = std.io.getStdIn().reader();
+				var buffer: [1]u8 = undefined;
+				_ = stdin.read(&buffer)
+					catch unreachable;
+			}
 			running = ops[vm.memory.half_words[ip.*]&0xFF](vm, core_ptr, ip);
 		}
 	}
