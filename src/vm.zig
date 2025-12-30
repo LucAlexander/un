@@ -207,12 +207,20 @@ pub const VM = struct {
 			if (debugger){
 				const stdout = std.io.getStdOut().writer();
 				stdout.print("\x1b[2J\x1b[H", .{}) catch unreachable;
+				for (0..16) |i| {
+					stdout.print("                                                                                       ", .{}) catch unreachable;
+					for (0 .. 8) |k| {
+						stdout.print("{x:02} ", .{vm.memory.mem[(i*8)+k]}) catch unreachable;
+					}
+					std.debug.print("\n", .{});
+				}
 				const bottom = core_ptr.reg[rsp]-8;
 				var top = bottom + 8*16;
 				if (top > vm.memory.mem.len){
 					top = vm.memory.mem.len-1;
 				}
 				while (top > bottom){
+					stdout.print("\x1b[H", .{}) catch unreachable;
 					stdout.print("                                                      ", .{}) catch unreachable;
 					var issp = false;
 					if (top-7 == core_ptr.reg[rsp]){
@@ -1468,7 +1476,9 @@ pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		return true;
 	}
 	if (core.reg[r0] == 2){
-		//TODO fork
+		if (vm.context)|context|{
+			_ = context.awaken_core(core.reg[r1] >> 2) catch {};
+		}
 		return true;
 	}
 	if (vm.context) |context| {
@@ -2350,5 +2360,4 @@ pub fn with(config:Config, bytecode: []u8, start: u64) void {
 }
 
 //TODO decoder
-//TODO debugger
 //TODO all of the interrupts
