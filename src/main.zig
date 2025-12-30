@@ -1827,22 +1827,22 @@ const Program = struct {
 			catch unreachable;
 	}
 
-	pub fn color_register(self: *Program, normalized: *Buffer(*Expr), i: *u64, expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(u64)) void {
+	pub fn color_register(self: *Program, normalized: *Buffer(*Expr), i: *u64, expr: *Expr, regmap: *Map(ir.Register), q: *Buffer(ir.Register), vacated: *Map(u64)) bool {
 		if (expr.* != .atom){
 			if (expr.list.items[0].* == .atom){
 				if (expr.list.items[0].atom.tag == .AT){
-					self.color_register(normalized, i, expr.list.items[1], regmap, q, vacated);
+					return self.color_register(normalized, i, expr.list.items[1], regmap, q, vacated);
 				}
 			}
-			return;
+			return false;
 		}
 		if (std.mem.eql(u8, expr.atom.text, "sp")){
 			expr.atom.tag = .SPTR;
-			return;
+			return false;
 		}
 		if (std.mem.eql(u8, expr.atom.text, "fp")){
 			expr.atom.tag = .FPTR;
-			return;
+			return false;
 		}
 		if (regmap.get(expr.atom.text)) |old| {
 			if (vacated.get(expr.atom.text)) |offset| {
@@ -1992,7 +1992,7 @@ const Program = struct {
 					catch unreachable;
 				expr.atom.tag = .REG11;
 				i.* += 3;
-				return;
+				return true;
 			}
 			for (q.items, 0..) |reg, k| {
 				if (old == reg){
@@ -2038,6 +2038,7 @@ const Program = struct {
 				}
 			}
 		}
+		return false;
 	}
 
 	pub fn color(self: *Program, normalized: *Buffer(*Expr)) void {
@@ -2201,44 +2202,52 @@ const Program = struct {
 					continue;
 				},
 				.REIF => {
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
-					self.write_back(normalized, &i);
+					if (self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated)){
+						self.write_back(normalized, &i);
+					}
 				},
 				.MOV => {
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
-					self.write_back(normalized, &i);
+					const wrote_10 = self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					_ = self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
+					if (wrote_10){
+						self.write_back(normalized, &i);
+					}
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[3], &regmap, &q, &vacated);
-					self.write_back(normalized, &i);
+					const wrote_10 = self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					_ = self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
+					_ = self.color_register(normalized, &i, expr.list.items[3], &regmap, &q, &vacated);
+					if (wrote_10){
+						self.write_back(normalized, &i);
+					}
 				},
 				.NOT, .COM, .CMP => {
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
-					self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
-					self.write_back(normalized, &i);
+					const wrote_10 = self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					_ = self.color_register(normalized, &i, expr.list.items[2], &regmap, &q, &vacated);
+					if (wrote_10){
+						self.write_back(normalized, &i);
+					}
 				},
 				.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .CALL, => {
 					continue;
 				},
 				.RET => {
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					_ = self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 				},
 				.PSH => {
 					stack_position += 8;
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
+					_ = self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
 				},
 				.POP => {
 					stack_position -= 8;
-					self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated);
-					self.write_back(normalized, &i);
+					if (self.color_register(normalized, &i, expr.list.items[1], &regmap, &q, &vacated)){
+						self.write_back(normalized, &i);
+					}
 				},
 				.INT => {
 					var k: u64 = 1;
 					while (k<expr.list.items.len){
-						self.color_register(normalized, &i, expr.list.items[k], &regmap, &q, &vacated);
+						_ = self.color_register(normalized, &i, expr.list.items[k], &regmap, &q, &vacated);
 						k += 1;
 					}
 				},
