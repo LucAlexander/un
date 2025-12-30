@@ -16,6 +16,14 @@ pub const Register = enum(u64) {
 	R1,
 	R2,
 	R3,
+	R4,
+	R5,
+	R6,
+	R7,
+	R8,
+	R9,
+	R10,
+	R11,
 	IP,
 	SR,
 	SP,
@@ -26,15 +34,23 @@ const r0 = 0;
 const r1 = 1;
 const r2 = 2;
 const r3 = 3;
-const rip = 4;
-const rsr = 5;
-const rsp = 6;
-const rfp = 7;
+const r4 = 4;
+const r5 = 5;
+const r6 = 6;
+const r7 = 7;
+const r8 = 8;
+const r9 = 9;
+const r10 = 10;
+const r11 = 11;
+const rip = 12;
+const rsr = 13;
+const rsp = 14;
+const rfp = 15;
 var kill_cores = false;
 threadlocal var active_core: u64 = 0;
 
 const Core = struct {
-	reg: [8]u64,
+	reg: [16]u64,
 
 	pub fn init(memsize: u64) Core {
 		var core = Core{
@@ -1463,6 +1479,8 @@ pub const TOKEN = enum(u64) {
 	OPEN,
 	CLOSE,
 	REG0, REG1, REG2, REG3,
+	REG4, REG5, REG6, REG7,
+	REG8, REG9, REG10, REG11,
 	REG_FP, REG_SP,
 };
 
@@ -1525,6 +1543,14 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	keywords.put("r1", .REG1) catch unreachable;
 	keywords.put("r2", .REG2) catch unreachable;
 	keywords.put("r3", .REG3) catch unreachable;
+	keywords.put("r4", .REG4) catch unreachable;
+	keywords.put("r5", .REG5) catch unreachable;
+	keywords.put("r6", .REG6) catch unreachable;
+	keywords.put("r7", .REG7) catch unreachable;
+	keywords.put("r8", .REG8) catch unreachable;
+	keywords.put("r9", .REG9) catch unreachable;
+	keywords.put("r10", .REG10) catch unreachable;
+	keywords.put("r11", .REG11) catch unreachable;
 	keywords.put("fp", .REG_FP) catch unreachable;
 	keywords.put("sp", .REG_SP) catch unreachable;
 	var i: u64 = 0;
@@ -2086,6 +2112,30 @@ pub fn parse_register(mem: *const std.mem.Allocator, tokens: []Token, i: *u64, e
 		},
 		.REG3 => {
 			return .R3;
+		},
+		.REG4 => {
+			return .R4;
+		},
+		.REG5 => {
+			return .R5;
+		},
+		.REG6 => {
+			return .R6;
+		},
+		.REG7 => {
+			return .R7;
+		},
+		.REG8 => {
+			return .R8;
+		},
+		.REG9 => {
+			return .R9;
+		},
+		.REG10 => {
+			return .R10;
+		},
+		.REG11 => {
+			return .R11;
 		},
 		.REG_FP => {
 			return .FP;

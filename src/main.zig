@@ -43,6 +43,14 @@ const TOKEN = enum(u64) {
 	REG1,
 	REG2,
 	REG3,
+	REG4,
+	REG5,
+	REG6,
+	REG7,
+	REG8,
+	REG9,
+	REG10,
+	REG11,
 	FPTR,
 	SPTR
 };
@@ -192,6 +200,30 @@ pub fn show_token(token: Token) void {
 		std.debug.print("[{}] ", .{token.tag});
 	}
 	if (token.tag == .REG3){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG4){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG5){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG6){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG7){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG8){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG9){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG10){
+		std.debug.print("[{}] ", .{token.tag});
+	}
+	if (token.tag == .REG11){
 		std.debug.print("[{}] ", .{token.tag});
 	}
 	if (token.tag == .FPTR){
@@ -698,11 +730,7 @@ const Program = struct {
 			}
 			if (inst.list.items[0].* == .list){
 				const flattened = self.normalize(normalized, reif, inst, true);
-				if (flattened) |flat| {
-					normalized.append(flat)
-						catch unreachable;
-				}
-				else{
+				if (flattened == null){
 					std.debug.print("could not flatten nested block\n", .{});
 					return null;
 				}
@@ -891,6 +919,7 @@ const Program = struct {
 		if (debug){
 			std.debug.print("Normalizing target: \n", .{});
 			show_expr(programexpr, 1);
+			std.debug.print("\n", .{});
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		var reif = Reif.init(self.mem);
@@ -1411,6 +1440,20 @@ const Program = struct {
 				},
 				.INT => {
 					std.debug.assert(expr.list.items.len < 5);
+					self.push_register(normalized, i, .REG9);
+					i += 1;
+					self.push_register(normalized, i, .REG8);
+					i += 1;
+					self.push_register(normalized, i, .REG7);
+					i += 1;
+					self.push_register(normalized, i, .REG6);
+					i += 1;
+					self.push_register(normalized, i, .REG5);
+					i += 1;
+					self.push_register(normalized, i, .REG4);
+					i += 1;
+					self.push_register(normalized, i, .REG3);
+					i += 1;
 					self.push_register(normalized, i, .REG2);
 					i += 1;
 					self.push_register(normalized, i, .REG1);
@@ -1434,7 +1477,15 @@ const Program = struct {
 							unreachable;
 						}
 					}
-					self.push_register(normalized, i+1, .REG3);
+					self.push_register(normalized, i+1, .REG11);
+					self.push_register(normalized, i+1, .REG10);
+					self.pop_register(normalized, i+1, .REG9);
+					self.pop_register(normalized, i+1, .REG8);
+					self.pop_register(normalized, i+1, .REG7);
+					self.pop_register(normalized, i+1, .REG6);
+					self.pop_register(normalized, i+1, .REG5);
+					self.pop_register(normalized, i+1, .REG4);
+					self.pop_register(normalized, i+1, .REG3);
 					self.pop_register(normalized, i+1, .REG2);
 					self.pop_register(normalized, i+1, .REG1);
 					self.pop_register(normalized, i+1, .REG0);
@@ -1492,7 +1543,14 @@ const Program = struct {
 			if ((source.list.items[1].atom.tag == register) or
 			  (source.list.items[1].atom.tag != .REG0 and
 			  source.list.items[1].atom.tag != .REG1 and
-			  source.list.items[1].atom.tag != .REG2)){
+			  source.list.items[1].atom.tag != .REG2 and
+			  source.list.items[1].atom.tag != .REG3 and
+			  source.list.items[1].atom.tag != .REG4 and
+			  source.list.items[1].atom.tag != .REG5 and
+			  source.list.items[1].atom.tag != .REG6 and
+			  source.list.items[1].atom.tag != .REG7 and
+			  source.list.items[1].atom.tag != .REG8 and
+			  source.list.items[1].atom.tag != .REG9)){
 				const loc = self.mem.create(Expr)
 					catch unreachable;
 				loc.* = Expr{
@@ -1602,6 +1660,34 @@ const Program = struct {
 		}
 		else if (register == .REG2){
 			text = self.mem.dupe(u8, "10")
+				catch unreachable;
+		}
+		else if (register == .REG3){
+			text = self.mem.dupe(u8, "18")
+				catch unreachable;
+		}
+		else if (register == .REG4){
+			text = self.mem.dupe(u8, "20")
+				catch unreachable;
+		}
+		else if (register == .REG5){
+			text = self.mem.dupe(u8, "28")
+				catch unreachable;
+		}
+		else if (register == .REG6){
+			text = self.mem.dupe(u8, "30")
+				catch unreachable;
+		}
+		else if (register == .REG7){
+			text = self.mem.dupe(u8, "38")
+				catch unreachable;
+		}
+		else if (register == .REG8){
+			text = self.mem.dupe(u8, "40")
+				catch unreachable;
+		}
+		else if (register == .REG9){
+			text = self.mem.dupe(u8, "48")
 				catch unreachable;
 		}
 		src.* = Expr{
@@ -1775,9 +1861,9 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = self.mem.dupe(u8, "r3") catch unreachable,
+						.text = self.mem.dupe(u8, "r10") catch unreachable,
 						.pos = 0,
-						.tag = .REG3
+						.tag = .REG10
 					}
 				};
 				var src = self.mem.create(Expr)
@@ -1813,9 +1899,9 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = self.mem.dupe(u8, "r3") catch unreachable,
+						.text = self.mem.dupe(u8, "r10") catch unreachable,
 						.pos = 0,
-						.tag = .REG3
+						.tag = .REG10
 					}
 				};
 				src = self.mem.create(Expr)
@@ -1857,9 +1943,9 @@ const Program = struct {
 					catch unreachable;
 				dest.* = Expr{
 					.atom = Token{
-						.text = self.mem.dupe(u8, "r3") catch unreachable,
+						.text = self.mem.dupe(u8, "r11") catch unreachable,
 						.pos = 0,
-						.tag = .REG3
+						.tag = .REG11
 					}
 				};
 				src = self.mem.create(Expr)
@@ -1876,9 +1962,18 @@ const Program = struct {
 						.tag = .AT
 					}
 				};
+				const dref = self.mem.create(Expr)
+					catch unreachable;
+				dref.* = Expr{
+					.atom = Token{
+						.text = self.mem.dupe(u8, "r10") catch unreachable,
+						.pos = 0,
+						.tag = .REG10
+					}
+				};
 				src.list.append(at)
 					catch unreachable;
-				src.list.append(dest)
+				src.list.append(dref)
 					catch unreachable;
 				loc.list.append(op)
 					catch unreachable;
@@ -1892,7 +1987,7 @@ const Program = struct {
 					catch unreachable;
 				normalized.insert(i.*, load)
 					catch unreachable;
-				expr.atom.tag = .REG3;
+				expr.atom.tag = .REG11;
 				i.* += 3;
 				return;
 			}
@@ -1914,6 +2009,27 @@ const Program = struct {
 				ir.Register.R2 => {
 					expr.atom.tag = .REG2;
 				},
+				ir.Register.R3 => {
+					expr.atom.tag = .REG3;
+				},
+				ir.Register.R4 => {
+					expr.atom.tag = .REG4;
+				},
+				ir.Register.R5 => {
+					expr.atom.tag = .REG5;
+				},
+				ir.Register.R6 => {
+					expr.atom.tag = .REG6;
+				},
+				ir.Register.R7 => {
+					expr.atom.tag = .REG7;
+				},
+				ir.Register.R8 => {
+					expr.atom.tag = .REG8;
+				},
+				ir.Register.R9 => {
+					expr.atom.tag = .REG9;
+				},
 				else => {
 					unreachable;
 				}
@@ -1927,6 +2043,13 @@ const Program = struct {
 		q.append(ir.Register.R0) catch unreachable;
 		q.append(ir.Register.R1) catch unreachable;
 		q.append(ir.Register.R2) catch unreachable;
+		q.append(ir.Register.R3) catch unreachable;
+		q.append(ir.Register.R4) catch unreachable;
+		q.append(ir.Register.R5) catch unreachable;
+		q.append(ir.Register.R6) catch unreachable;
+		q.append(ir.Register.R7) catch unreachable;
+		q.append(ir.Register.R8) catch unreachable;
+		q.append(ir.Register.R9) catch unreachable;
 		var vacated = Map(u64).init(self.mem.*);
 		var stack_position: u64 = 0;
 		var i: u64 = 0;
@@ -1962,10 +2085,10 @@ const Program = struct {
 							};
 							loc.list.append(left)
 								catch unreachable;
+							const right = self.mem.create(Expr)
+								catch unreachable;
 							switch (register) {
 								ir.Register.R0 => {
-									const right = self.mem.create(Expr)
-										catch unreachable;
 									right.* = Expr{
 										.atom = Token{
 											.text = expr.list.items[1].atom.text,
@@ -1973,12 +2096,8 @@ const Program = struct {
 											.tag = .REG0
 										}
 									};
-									loc.list.append(right)
-										catch unreachable;					
 								},
 								ir.Register.R1 => {
-									const right = self.mem.create(Expr)
-										catch unreachable;
 									right.* = Expr{
 										.atom = Token{
 											.text = expr.list.items[1].atom.text,
@@ -1986,12 +2105,8 @@ const Program = struct {
 											.tag = .REG1
 										}
 									};
-									loc.list.append(right)
-										catch unreachable;					
 								},
 								ir.Register.R2 => {
-									const right = self.mem.create(Expr)
-										catch unreachable;
 									right.* = Expr{
 										.atom = Token{
 											.text = expr.list.items[1].atom.text,
@@ -1999,13 +2114,76 @@ const Program = struct {
 											.tag = .REG2
 										}
 									};
-									loc.list.append(right)
-										catch unreachable;					
+								},
+								ir.Register.R3 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG3
+										}
+									};
+								},
+								ir.Register.R4 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG4
+										}
+									};
+								},
+								ir.Register.R5 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG5
+										}
+									};
+								},
+								ir.Register.R6 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG6
+										}
+									};
+								},
+								ir.Register.R7 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG7
+										}
+									};
+								},
+								ir.Register.R8 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG8
+										}
+									};
+								},
+								ir.Register.R9 => {
+									right.* = Expr{
+										.atom = Token{
+											.text = expr.list.items[1].atom.text,
+											.pos = expr.list.items[1].atom.pos,
+											.tag = .REG9
+										}
+									};
 								},
 								else => {
 									unreachable;
 								}
 							}
+							loc.list.append(right)
+								catch unreachable;					
 							normalized.insert(i, loc)
 								catch unreachable;
 							stack_position += 8;
@@ -2515,6 +2693,14 @@ pub fn is_register(expr: *Expr) ?ir.Register {
 	if (expr.atom.tag == .REG1) return ir.Register.R1;
 	if (expr.atom.tag == .REG2) return ir.Register.R2;
 	if (expr.atom.tag == .REG3) return ir.Register.R3;
+	if (expr.atom.tag == .REG4) return ir.Register.R4;
+	if (expr.atom.tag == .REG5) return ir.Register.R5;
+	if (expr.atom.tag == .REG6) return ir.Register.R6;
+	if (expr.atom.tag == .REG7) return ir.Register.R7;
+	if (expr.atom.tag == .REG8) return ir.Register.R8;
+	if (expr.atom.tag == .REG9) return ir.Register.R9;
+	if (expr.atom.tag == .REG10) return ir.Register.R10;
+	if (expr.atom.tag == .REG11) return ir.Register.R11;
 	if (expr.atom.tag == .FPTR) return ir.Register.FP;
 	if (expr.atom.tag == .SPTR) return ir.Register.SP;
 	return null;
