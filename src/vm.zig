@@ -1,7 +1,7 @@
 const std = @import("std");
 const Buffer = std.ArrayList;
 
-const debug = true;
+const debug = false;
 const debugger = true;
 
 pub const Config = struct {
@@ -236,6 +236,7 @@ pub const VM = struct {
 				stdout.print("\x1b[2J\x1b[H", .{}) catch unreachable;
 				for (0..16) |i| {
 					stdout.print("                                                                                       ", .{}) catch unreachable;
+					stdout.print("{x:04} : ", .{(i*8)}) catch unreachable;
 					for (0 .. 8) |k| {
 						stdout.print("{x:02} ", .{vm.memory.mem[(i*8)+k]}) catch unreachable;
 					}

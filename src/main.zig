@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = true;
+var debug = false;
 
 const Error = struct {
 	message: []u8,
@@ -98,8 +98,8 @@ pub fn main() !void {
 		for (tokens.items) |token| {
 			show_token(token);
 		}
+		std.debug.print("\n", .{});
 	}
-	std.debug.print("\n", .{});
 	const raw_expressions = parse_program(&mem, tokens.items, &error_log) catch {
 		for (error_log.items) |err| {
 			show_error(contents, err);
@@ -110,8 +110,8 @@ pub fn main() !void {
 		for (raw_expressions.items) |expr| {
 			show_expr(expr, 1);
 		}
+		std.debug.print("\n", .{});
 	}
-	std.debug.print("\n", .{});
 	var program = Program.init(&mem);
 	const default_target = Token {
 		.text = mem.dupe(u8, "vm") catch unreachable,
