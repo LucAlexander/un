@@ -84,6 +84,7 @@ const Memory = struct {
 };
 
 const Operation = *const fn (*VM, *Core, *align(1) u64) bool;
+const Inverse = *const fn (u8, u8, u8) void;
 
 const ContextError = error {
 	NoCore
@@ -205,6 +206,32 @@ pub const VM = struct {
 		};
 		while (running){
 			if (debugger){
+				const inv: [85]Inverse = .{
+					inv_mov_rr, inv_mov_rl, inv_mov_rdr, 
+					inv_mov_drr, inv_mov_drl, inv_mov_drdr,
+					inv_add_rrr, inv_add_rrl, inv_add_rlr, inv_add_rll,
+					inv_sub_rrr, inv_sub_rrl, inv_sub_rlr, inv_sub_rll,
+					inv_mul_rrr, inv_mul_rrl, inv_mul_rlr, inv_mul_rll,
+					inv_div_rrr, inv_div_rrl, inv_div_rlr, inv_div_rll,
+					inv_mod_rrr, inv_mod_rrl, inv_mod_rlr, inv_mod_rll,
+					inv_uadd_rrr, inv_uadd_rrl, inv_uadd_rlr, inv_uadd_rll,
+					inv_umul_rrr, inv_umul_rrl, inv_umul_rlr, inv_umul_rll,
+					inv_usub_rrr, inv_usub_rrl, inv_usub_rlr, inv_usub_rll,
+					inv_udiv_rrr, inv_udiv_rrl, inv_udiv_rlr, inv_udiv_rll,
+					inv_umod_rrr, inv_umod_rrl, inv_umod_rlr, inv_umod_rll,
+					inv_shr_rrr, inv_shr_rrl, inv_shr_rlr, inv_shr_rll,
+					inv_shl_rrr, inv_shl_rrl, inv_shl_rlr, inv_shl_rll,
+					inv_and_rrr, inv_and_rrl, inv_and_rlr, inv_and_rll,
+					inv_or_rrr, inv_or_rrl, inv_or_rlr, inv_or_rll,
+					inv_xor_rrr, inv_xor_rrl, inv_xor_rlr, inv_xor_rll,
+					inv_not_rr, inv_not_rl,
+					inv_com_rr, inv_com_rl,
+					inv_cmp_rr, inv_cmp_rl,
+					inv_jmp, inv_jeq, inv_jle, inv_jgt, inv_jge, inv_jlt, inv_jle,
+					inv_call, inv_ret_r, inv_ret_l,
+					inv_psh_r, inv_pop_r,
+					inv_int
+				};
 				const stdout = std.io.getStdOut().writer();
 				stdout.print("\x1b[2J\x1b[H", .{}) catch unreachable;
 				for (0..16) |i| {
@@ -221,7 +248,7 @@ pub const VM = struct {
 				}
 				while (top > bottom){
 					stdout.print("\x1b[H", .{}) catch unreachable;
-					stdout.print("                                                      ", .{}) catch unreachable;
+					stdout.print("                                                          ", .{}) catch unreachable;
 					var issp = false;
 					if (top-7 == core_ptr.reg[rsp]){
 						stdout.print("\x1b[1;33m", .{}) catch unreachable;
@@ -244,16 +271,21 @@ pub const VM = struct {
 				}
 				const end = begin + 4*16;
 				while (begin < end){
-					stdout.print("                                ", .{}) catch unreachable;
+					stdout.print("                            ", .{}) catch unreachable;
 					var isip = false;
 					if (begin == ip_addr){
 						stdout.print("\x1b[1;31m", .{}) catch unreachable;
 						isip = true;
 					}
-					for (0..4) |_| {
-						stdout.print("{x:02} ", .{vm.memory.mem[begin]}) catch unreachable;
-						begin += 1;
+					const op = vm.memory.mem[begin];
+					const a = vm.memory.mem[begin+1];
+					const b = vm.memory.mem[begin+2];
+					const c = vm.memory.mem[begin+3];
+					stdout.print("{x:02} {x:02} {x:02} {x:02}     ", .{op, a, b, c}) catch unreachable;
+					if (op < inv.len){
+						inv[op](a, b, c);
 					}
+					begin += 4;
 					if (isip){
 						stdout.print("\x1b[0m", .{}) catch unreachable;
 					}
@@ -2359,5 +2391,705 @@ pub fn with(config:Config, bytecode: []u8, start: u64) void {
 	context.deinit();
 }
 
-//TODO decoder
-//TODO all of the interrupts
+pub fn write_register(reg: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	switch (reg) {
+		0 => {stdout.print("r0 ", .{}) catch unreachable;},
+		1 => {stdout.print("r1 ", .{}) catch unreachable;},
+		2 => {stdout.print("r2 ", .{}) catch unreachable;},
+		3 => {stdout.print("r3 ", .{}) catch unreachable;},
+		4 => {stdout.print("r4 ", .{}) catch unreachable;},
+		5 => {stdout.print("r5 ", .{}) catch unreachable;},
+		6 => {stdout.print("r6 ", .{}) catch unreachable;},
+		7 => {stdout.print("r7 ", .{}) catch unreachable;},
+		8 => {stdout.print("r8 ", .{}) catch unreachable;},
+		9 => {stdout.print("r9 ", .{}) catch unreachable;},
+		10 => {stdout.print("r10 ", .{}) catch unreachable;},
+		11 => {stdout.print("r11 ", .{}) catch unreachable;},
+		12 => {stdout.print("rip ", .{}) catch unreachable;},
+		13 => {stdout.print("rsr ", .{}) catch unreachable;},
+		14 => {stdout.print("rsp ", .{}) catch unreachable;},
+		15 => {stdout.print("rfp ", .{}) catch unreachable;},
+		else => {
+			unreachable;
+		}
+	}
+}
+
+pub fn write_dregister(reg: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	switch (reg) {
+		0 => {stdout.print("*r0 ", .{}) catch unreachable;},
+		1 => {stdout.print("*r1 ", .{}) catch unreachable;},
+		2 => {stdout.print("*r2 ", .{}) catch unreachable;},
+		3 => {stdout.print("*r3 ", .{}) catch unreachable;},
+		4 => {stdout.print("*r4 ", .{}) catch unreachable;},
+		5 => {stdout.print("*r5 ", .{}) catch unreachable;},
+		6 => {stdout.print("*r6 ", .{}) catch unreachable;},
+		7 => {stdout.print("*r7 ", .{}) catch unreachable;},
+		8 => {stdout.print("*r8 ", .{}) catch unreachable;},
+		9 => {stdout.print("*r9 ", .{}) catch unreachable;},
+		10 => {stdout.print("*r10 ", .{}) catch unreachable;},
+		11 => {stdout.print("*r11 ", .{}) catch unreachable;},
+		12 => {stdout.print("*rip ", .{}) catch unreachable;},
+		13 => {stdout.print("*rsr ", .{}) catch unreachable;},
+		14 => {stdout.print("*rsp ", .{}) catch unreachable;},
+		15 => {stdout.print("*rfp ", .{}) catch unreachable;},
+		else => {
+			unreachable;
+		}
+	}
+}
+
+pub fn write_lit8(c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("{x:02} ", .{c}) catch unreachable;
+}
+
+pub fn write_lit16(b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	const lit = (@as(u16, @intCast(b)) << 8) | c;
+	stdout.print("{x:04} ", .{lit}) catch unreachable;
+}
+
+pub fn inv_mov_rr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mov ", .{}) catch unreachable;
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_mov_rl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mov ", .{}) catch unreachable;
+	write_register(a);
+	write_lit16(b, c);
+}
+
+pub fn inv_mov_rdr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mov ", .{}) catch unreachable;
+	write_register(b);
+	write_dregister(c);
+}
+
+pub fn inv_mov_drr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mov ", .{}) catch unreachable;
+	write_dregister(b);
+	write_register(c);
+}
+
+pub fn inv_mov_drl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mov ", .{}) catch unreachable;
+	write_dregister(a);
+	write_lit16(b, c);
+}
+
+pub fn inv_mov_drdr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mov ", .{}) catch unreachable;
+	write_dregister(b);
+	write_dregister(c);
+}
+
+pub fn inv_add_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("add ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_add_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("add ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_add_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("add ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_add_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("add ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_sub_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("sub ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_sub_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("sub ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_sub_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("sub ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_sub_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("sub ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_mul_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mul ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_mul_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mul ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_mul_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mul ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_mul_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mul ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_div_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("div ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_div_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("div ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_div_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("div ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_div_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("div ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_mod_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mod ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_mod_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mod ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_mod_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mod ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_mod_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("mod ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_uadd_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("uadd ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_uadd_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("uadd ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_uadd_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("uadd ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_uadd_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("uadd ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_usub_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("usub ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_usub_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("usub ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_usub_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("usub ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_usub_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("usub ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_umul_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umul ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_umul_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umul ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_umul_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umul ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_umul_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umul ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_udiv_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("udiv ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_udiv_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("udiv ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_udiv_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("udiv ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_udiv_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("udiv ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_umod_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umod ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_umod_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umod ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_umod_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umod ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_umod_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("umod ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_shl_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shl ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_shl_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shl ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_shl_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shl ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_shl_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shl ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_shr_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shr ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_shr_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shr ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_shr_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shr ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_shr_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("shr ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_and_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("and ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_and_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("and ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_and_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("and ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_and_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("and ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_xor_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("xor ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_xor_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("xor ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_xor_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("xor ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_xor_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("xor ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_or_rrr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("or ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_or_rrl(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("or ", .{}) catch unreachable;
+	write_register(a);
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_or_rlr(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("or ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_register(c);
+}
+
+pub fn inv_or_rll(a: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("or ", .{}) catch unreachable;
+	write_register(a);
+	write_lit8(b);
+	write_lit8(c);
+}
+
+pub fn inv_not_rr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("not ", .{}) catch unreachable;
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_not_rl(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("not ", .{}) catch unreachable;
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_com_rr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("com ", .{}) catch unreachable;
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_com_rl(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("com ", .{}) catch unreachable;
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_cmp_rr(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("cmp ", .{}) catch unreachable;
+	write_register(b);
+	write_register(c);
+}
+
+pub fn inv_cmp_rl(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("cmp ", .{}) catch unreachable;
+	write_register(b);
+	write_lit8(c);
+}
+
+pub fn inv_jmp(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jmp ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_jeq(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jeq ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_jne(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jne ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_jlt(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jlt ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_jle(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jle ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_jgt(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jgt ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_jge(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("jge ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_call(_: u8, b: u8, c: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("call ", .{}) catch unreachable;
+	write_lit16(b, c);
+}
+
+pub fn inv_ret_r(a: u8, _: u8, _: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("re t", .{}) catch unreachable;
+	write_register(a);
+}
+
+pub fn inv_ret_l(a: u8, _: u8, _: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("ret ", .{}) catch unreachable;
+	write_lit8(a);
+}
+
+pub fn inv_psh_r(a: u8, _: u8, _: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("psh ", .{}) catch unreachable;
+	write_register(a);
+}
+
+pub fn inv_pop_r(a: u8, _: u8, _: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("pop ", .{}) catch unreachable;
+	write_register(a);
+}
+
+pub fn inv_int(_: u8, _: u8, _: u8) void {
+	const stdout = std.io.getStdOut().writer();
+	stdout.print("int ", .{}) catch unreachable;
+}
+
