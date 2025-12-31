@@ -2073,7 +2073,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				unreachable;
 			},
 			.NOT, .COM => {
-				const seed = 64+((@intFromEnum(inst.tag)-16)*2);
+				const seed = 66+((@intFromEnum(inst.tag)-16)*2);
 				if (inst.data.alu_un.src == .register){
 					bytes[byte] = @truncate(seed);
 					byte += 1;
@@ -2098,7 +2098,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 			},
 			.CMP => {
 				if (inst.data.compare.right == .register){
-					bytes[byte] = 76;
+					bytes[byte] = 70;
 					byte += 1;
 					bytes[byte] = 0;
 					byte += 1;
@@ -2108,7 +2108,7 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 					byte += 1;
 				}
 				else if (inst.data.compare.right == .literal){
-					bytes[byte] = 77;
+					bytes[byte] = 71;
 					byte += 1;
 					bytes[byte] = 0;
 					byte += 1;
@@ -2120,7 +2120,8 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				continue;
 			},
 			.JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE => {
-				bytes[byte] = 78;
+				const seed = 72+(@intFromEnum(inst.tag)-19);
+				bytes[byte] = @truncate(seed);
 				byte += 1;
 				bytes[byte] = 0;
 				byte += 1;
