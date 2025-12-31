@@ -375,7 +375,7 @@ pub fn mov_drr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
-	vm.memory.words[core.reg[dst]] = core.reg[src];
+	vm.memory.words[core.reg[dst] >> 3] = core.reg[src];
 	ip.* += 1;
 	return true;
 }
@@ -387,7 +387,7 @@ pub fn mov_drl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	const lit = (inst & 0xFFFF0000) >> 0x10;
-	vm.memory.words[core.reg[reg]] = lit;
+	vm.memory.words[core.reg[reg] >> 3] = lit;
 	ip.* += 1;
 	return true;
 }
@@ -399,7 +399,7 @@ pub fn mov_drdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
-	vm.memory.words[core.reg[dst]] = vm.memory.words[core.reg[src] >> 3];
+	vm.memory.words[core.reg[dst] >> 3] = vm.memory.words[core.reg[src] >> 3];
 	ip.* += 1;
 	return true;
 }
