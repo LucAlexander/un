@@ -2124,9 +2124,9 @@ pub fn assemble_bytecode(mem: *const std.mem.Allocator, instructions: []Instruct
 				byte += 1;
 				bytes[byte] = 0;
 				byte += 1;
-				bytes[byte] = @truncate((inst.data.jump >> 0x8) & 0xFF);
-				byte += 1;
 				bytes[byte] = @truncate(inst.data.jump & 0xFF);
+				byte += 1;
+				bytes[byte] = @truncate((inst.data.jump >> 0x8) & 0xFF);
 				byte += 1;
 				continue;
 			},
