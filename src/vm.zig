@@ -1,7 +1,7 @@
 const std = @import("std");
 const Buffer = std.ArrayList;
 
-const debug = false;
+const debug = true;
 const debugger = true;
 
 pub const Config = struct {

@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = false;
+var debug = true;
 
 const Error = struct {
 	message: []u8,
@@ -2610,7 +2610,7 @@ const Program = struct {
 							aliasmap.put(alias.atom.text, loc)
 								catch unreachable;
 						}
-						const replace = distribute_args(aliasmap, expr.list.items[2]);
+						const replace = distribute_args(self.mem, aliasmap, expr.list.items[2]);
 						return try self.descend(replace, vm_target, err);
 					}
 					if (expr.list.items[0].atom.tag == .USE){
@@ -2912,10 +2912,10 @@ pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *
 		argmap.put(argname.atom.text, application)
 			catch unreachable;
 	}
-	return distribute_args(argmap, bind.expr);
+	return distribute_args(mem, argmap, bind.expr);
 }
 
-pub fn distribute_args(argmap: Map(*Expr), expr: *Expr) *Expr {
+pub fn distribute_args(mem: *const std.mem.Allocator, argmap: Map(*Expr), expr: *Expr) *Expr {
 	switch (expr.*){
 		.atom => {
 			if (argmap.get(expr.atom.text)) |replacement| {
@@ -2924,10 +2924,16 @@ pub fn distribute_args(argmap: Map(*Expr), expr: *Expr) *Expr {
 			return expr;
 		},
 		.list => {
+			const copy = mem.create(Expr)
+				catch unreachable;
+			copy.* = Expr{
+				.list = Buffer(*Expr).init(mem.*)
+			};
 			for (0 .. expr.list.items.len) |i| {
-				expr.list.items[i] = distribute_args(argmap, expr.list.items[i]);
+				copy.list.append(distribute_args(mem, argmap, expr.list.items[i]))
+					catch unreachable;
 			}
-			return expr;
+			return copy;
 		}
 	}
 	unreachable;
