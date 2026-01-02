@@ -1,0 +1,94 @@
+(bind if (condition consequent alternate) (
+	(uid (x after alt) (
+		(reg x)
+		(mov x (flat (condition)))
+		(cmp x 0)
+		(jeq alt)
+		(flat (consequent))
+		(jmp after)
+		(label alt)
+		(flat (alternate))
+		(label after)
+	))
+))
+
+(bind eq (left right) (
+	(uid (x T after) (
+		(mov x left)
+		(cmp x right)
+		(jeq T)
+		(mov x 0)
+		(jmp after)
+		(label T)
+		(mov x 1)
+		(label after)
+		(x)
+	))
+))
+
+(bind not (val) (
+	(uid (x one after) (
+		(reg x)
+		(mov x val)
+		(cmp x 0)
+		(jeq one)
+		(mov x 0)
+		(jmp after)
+		(label one)
+		(mov x 0)
+		(label after)
+		(x)
+	))
+))
+
+(bind gt (left right) (
+	(uid (x T after) (
+		(mov x left)
+		(cmp x right)
+		(jgt T)
+		(mov x 0)
+		(jmp after)
+		(label T)
+		(mov x 1)
+		(label after)
+		(x)
+	))
+))
+
+(bind lt (left right) (
+	(uid (x T after) (
+		(mov x left)
+		(cmp x right)
+		(jlt T)
+		(mov x 0)
+		(jmp after)
+		(label T)
+		(mov x 1)
+		(label after)
+		(x)
+	))
+))
+
+(bind & (left right) (
+	(uid (x) (
+		(reg x)
+		(and x left right)
+		(x)
+	))
+))
+
+(bind ^ (left right) (
+	(uid (x) (
+		(reg x)
+		(xor x left right)
+		(x)
+	))
+))
+
+(bind | (left right) (
+	(uid (x) (
+		(reg x)
+		(or x left right)
+		(x)
+	))
+))
