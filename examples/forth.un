@@ -1,0 +1,127 @@
+(bind swp () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(psh x)
+		(psh y)
+	))
+))
+
+(bind rot () (
+	(uid (x y z) (
+		(reg x)
+		(reg y)
+		(reg z)
+		(pop x)
+		(pop y)
+		(pop z)
+		(psh y)
+		(psh x)
+		(psh z)
+	))
+))
+
+(bind ovr () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(psh y)
+		(psh x)
+		(psh y)
+	))
+))
+
+(bind nip () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(psh x)
+	))
+))
+
+(bind dup () (
+	(uid (x) (
+		(reg x)
+		(pop x)
+		(psh x)
+		(psh x)
+	))
+))
+
+(bind cut () (
+	(uid (x y z) (
+		(reg x)
+		(reg y)
+		(reg z)
+		(pop x)
+		(pop y)
+		(pop z)
+		(psh y)
+		(psh x)
+	))
+))
+
+(bind + () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(add x x y)
+		(psh x)
+	))
+))
+
+(bind - () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(sub x x y)
+		(psh x)
+	))
+))
+
+(bind * () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(mul x x y)
+		(psh x)
+	))
+))
+
+(bind / () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(div x x y)
+		(psh x)
+	))
+))
+
+(bind % () (
+	(uid (x y) (
+		(reg x)
+		(reg y)
+		(pop x)
+		(pop y)
+		(mod x x y)
+		(psh x)
+	))
+))
+
+(bind word (name exp) (
+	(bind name () exp)
+))
