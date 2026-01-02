@@ -122,6 +122,6 @@
 	))
 ))
 
-(bind word (name exp) (
+(bind word (name exp)
 	(bind name () exp)
-))
+)
