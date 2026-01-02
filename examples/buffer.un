@@ -1,4 +1,5 @@
 (use "arena.un")
+(use "control_flow.un")
 
 (bind buffer (arena item capacity) (
 	(uid (size ptr result off) (
@@ -7,8 +8,8 @@
 		(reg ptr)
 		(mov size item)
 		(mul size size capacity)
-		(mov result (flat (alloc arena 18)))
-		(mov ptr (flat (alloc arena size)))
+		(mov result (alloc arena 18))
+		(mov ptr (alloc arena size))
 		(reg off)
 		(mov off result)
 		(mov (at off) 0)

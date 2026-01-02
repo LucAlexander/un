@@ -1,13 +1,13 @@
 (bind if (condition consequent alternate) (
 	(uid (x after alt) (
 		(reg x)
-		(mov x (flat (condition)))
+		(mov x (condition))
 		(cmp x 0)
 		(jeq alt)
-		(flat (consequent))
+		(consequent)
 		(jmp after)
 		(label alt)
-		(flat (alternate))
+		(alternate)
 		(label after)
 	))
 ))
@@ -69,7 +69,7 @@
 	))
 ))
 
-(bind & (left right) (
+(bind AND (left right) (
 	(uid (x) (
 		(reg x)
 		(and x left right)
@@ -77,7 +77,7 @@
 	))
 ))
 
-(bind ^ (left right) (
+(bind XOR (left right) (
 	(uid (x) (
 		(reg x)
 		(xor x left right)
@@ -85,7 +85,7 @@
 	))
 ))
 
-(bind | (left right) (
+(bind OR (left right) (
 	(uid (x) (
 		(reg x)
 		(or x left right)

@@ -706,7 +706,20 @@ const Program = struct {
 					}
 					if (eval){
 						if (self.parse_ir(candidate)) |repr| {
-							return self.evaluate(vm_target, repr);
+							const evaluated = self.evaluate(vm_target, repr);
+							if (evaluated.* == .list){
+								if (evaluated.list.items.len == 4){
+									if (evaluated.list.items[0].* == .atom){
+										if (evaluated.list.items[0].atom.tag == .BIND){
+											const bind = try expr_to_bind(self.mem, evaluated, err);
+											self.binds.put(bind.name.text, bind)
+												catch unreachable;
+											continue;
+										}
+									}
+								}
+							}
+							return evaluated;
 						}
 					}
 					return candidate;
@@ -716,6 +729,13 @@ const Program = struct {
 	}
 
 	pub fn normalize(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: *Expr, full: bool) ?*Expr {
+		if (expr.* == .list){
+			if (expr.list.items.len == 1){
+				if (expr.list.items[0].* == .list){
+					return self.normalize(normalized, reif, expr.list.items[0], full);
+				}
+			}
+		}
 		var limit = expr.list.items.len-1;
 		if (full){
 			limit += 1;
