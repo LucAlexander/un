@@ -244,7 +244,7 @@ pub const VM = struct {
 				}
 				const bottom = core_ptr.reg[rsp]-8;
 				var top = bottom + 8*16;
-				if (top > vm.memory.mem.len){
+				if (top >= vm.memory.mem.len){
 					top = vm.memory.mem.len-1;
 				}
 				while (top > bottom){
