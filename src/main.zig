@@ -1328,7 +1328,6 @@ const Program = struct {
 									catch unreachable;
 								const offset:i16 = @bitCast(@as(u16, @truncate(entry.*.atom.pos)));
 								const current: i16 = @bitCast(@as(u16, @truncate(i)));
-								std.debug.print("{} {}\n", .{offset, current});
 								const replaceslice = std.fmt.bufPrint(replacebuf, "{x}", .{@as(u16, @bitCast(current-%offset))})
 									catch unreachable;
 								entry.* = self.mem.create(Expr)
@@ -2966,7 +2965,7 @@ pub fn expr_to_bind(mem: *const std.mem.Allocator, bind: *Expr, err: *Buffer(Err
 		return ParseError.UnexpectedToken;
 	}
 	if (bind.list.items.len != 4){
-		err.append(set_error(mem, bind.atom.pos, "Expected 3 arguments for bind special form, found {}\n", .{bind.list.items.len}))
+		err.append(set_error(mem, 0, "Expected 3 arguments for bind special form, found {}\n", .{bind.list.items.len}))
 			catch unreachable;
 		return ParseError.UnexpectedToken;
 	}
