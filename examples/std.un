@@ -1,0 +1,15 @@
+(use "buffer.un")
+
+(bind untag (y) (
+	(uid (z) (
+		(reg z)
+		(mov z ffff)
+		(shl z z 8)
+		(or z z ff)
+		(shl z z 8)
+		(or z z ff)
+		(and y y z)))
+))
+
+(bind comment text ())
+

@@ -1254,7 +1254,7 @@ const Program = struct {
 					continue;
 				},
 				else => {
-					std.debug.print("Invalid opcode\n", .{});
+					std.debug.print("Invalid opcode {s}\n", .{expr.list.items[0].atom.text});
 					return null;
 				}
 			}
@@ -1462,6 +1462,7 @@ const Program = struct {
 						i += 1;
 					}
 					_ = normalized.orderedRemove(i);
+					i -= 1;
 				},
 				.INT => {
 					std.debug.assert(expr.list.items.len < 5);
