@@ -2575,16 +2575,18 @@ const Program = struct {
 					if (expr.list.items[0].atom.tag == .BIND){
 						const bind = try expr_to_bind(self.mem, expr, err);
 						if (bind.expr.* == .list){
-							if (bind.expr.list.items[0].* == .atom){
-								if (bind.expr.list.items[0].atom.tag == .COMP){
-									self.binds.put(bind.name.text, bind)
-										catch unreachable;
-									const nop = self.mem.create(Expr)
-										catch unreachable;
-									nop.* = Expr{
-										.list = Buffer(*Expr).init(self.mem.*)
-									};
-									return nop;
+							if (bind.expr.list.items.len != 0){
+								if (bind.expr.list.items[0].* == .atom){
+									if (bind.expr.list.items[0].atom.tag == .COMP){
+										self.binds.put(bind.name.text, bind)
+											catch unreachable;
+										const nop = self.mem.create(Expr)
+											catch unreachable;
+										nop.* = Expr{
+											.list = Buffer(*Expr).init(self.mem.*)
+										};
+										return nop;
+									}
 								}
 							}
 						}
@@ -2609,7 +2611,7 @@ const Program = struct {
 					}
 					if (expr.list.items[0].atom.tag == .UID){
 						if (expr.list.items.len != 3){
-							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 3 arguments for uid block\n", .{}))
+							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 2 arguments for uid block, found {}\n", .{expr.list.items.len}))
 								catch unreachable;
 							return ParseError.UnexpectedToken;
 						}
