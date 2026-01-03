@@ -97,6 +97,7 @@ pub const Context = struct {
 	vm: *VM,
 	
 	pub fn init(config: Config, vm: *VM) Context {
+		kill_cores = false;
 		var context = Context {
 			.threads = config.mem.alloc(std.Thread, vm.cores.len) catch unreachable,
 			.mutex = std.Thread.Mutex{},
@@ -125,7 +126,7 @@ pub const Context = struct {
 				self.vm.cores[core].reg[rip] = start_ip;
 				_ = @atomicRmw(u64, &self.running, .Add, 1, .seq_cst);
 				if (debug){
-					std.debug.print("awakened {}\n", .{core});
+					std.debug.print("awakened {} at {}\n", .{core, start_ip});
 				}
 				return core;
 			}
