@@ -386,6 +386,18 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	keywords.put("ret", .RET) catch unreachable;
 	keywords.put("int", .INT) catch unreachable;
 	keywords.put("at", .AT) catch unreachable;
+	keywords.put("r0", .REG0) catch unreachable;
+	keywords.put("r1", .REG1) catch unreachable;
+	keywords.put("r2", .REG2) catch unreachable;
+	keywords.put("r3", .REG3) catch unreachable;
+	keywords.put("r4", .REG4) catch unreachable;
+	keywords.put("r5", .REG5) catch unreachable;
+	keywords.put("r6", .REG6) catch unreachable;
+	keywords.put("r7", .REG7) catch unreachable;
+	keywords.put("r8", .REG8) catch unreachable;
+	keywords.put("r9", .REG9) catch unreachable;
+	keywords.put("r10", .REG10) catch unreachable;
+	keywords.put("r11", .REG11) catch unreachable;
 	while (i < text.len) {
 		var c = text[i];
 		var token = Token {
@@ -1859,6 +1871,12 @@ const Program = struct {
 			}
 			return false;
 		}
+		switch (expr.atom.tag){
+			.REG0, .REG1, .REG2, .REG3, .REG4, .REG5, .REG6, .REG7, .REG8, .REG9, .REG10, .REG11 => {
+				return false;
+			},
+			else => {}
+		}
 		if (std.mem.eql(u8, expr.atom.text, "sp")){
 			expr.atom.tag = .SPTR;
 			return false;
@@ -2445,7 +2463,7 @@ const Program = struct {
 			};
 			return loc;
 		}
-		const return_address = vm.?.cores[0].reg[3];
+		const return_address = vm.?.cores[0].reg[11];
 		return self.lift_reif(vm.?, repr.reif, return_address);
 	}
 
