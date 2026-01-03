@@ -2639,23 +2639,6 @@ const Program = struct {
 						return try self.descend(expr.list.items[1].list.items[0], vm_target, err);
 					}
 					if (expr.list.items[0].atom.tag == .BIND){
-						const bind = try expr_to_bind(self.mem, expr, err);
-						if (bind.expr.* == .list){
-							if (bind.expr.list.items.len != 0){
-								self.binds.put(bind.name.text, bind)
-									catch unreachable;
-								const nop = self.mem.create(Expr)
-									catch unreachable;
-								nop.* = Expr{
-									.list = Buffer(*Expr).init(self.mem.*)
-								};
-								if (debug){
-									std.debug.print("continuing on nested bind {s}, returning nop\n", .{bind.name.text});
-								}
-								return nop;
-							}
-						}
-						expr.list.items[3] = try self.descend(expr.list.items[3], vm_target, err);
 						return expr;
 					}
 					if (expr.list.items[0].atom.tag == .COMP){
