@@ -690,10 +690,16 @@ const Program = struct {
 				}
 				if (expr.list.items.len != 0){
 					if (expr.list.items[0].* == .atom){
+						if (debug){
+							std.debug.print("considering {s}\n", .{expr.list.items[0].atom.text});
+						}
 						if (expr.list.items[0].atom.tag == .BIND){
 							const bind = try expr_to_bind(self.mem, expr, err);
 							self.binds.put(bind.name.text, bind)
 								catch unreachable;
+							if (debug){
+								std.debug.print("continuing on bind {s}\n", .{bind.name.text});
+							}
 							continue;
 						}
 						else if (expr.list.items[0].atom.tag == .USE){
@@ -710,6 +716,9 @@ const Program = struct {
 									const bind = try expr_to_bind(self.mem, candidate, err);
 									self.binds.put(bind.name.text, bind)
 										catch unreachable;
+									if (debug){
+										std.debug.print("continuing on bind {s} after descend\n", .{bind.name.text});
+									}
 									continue;
 								}
 							}
@@ -729,6 +738,9 @@ const Program = struct {
 											const bind = try expr_to_bind(self.mem, evaluated, err);
 											self.binds.put(bind.name.text, bind)
 												catch unreachable;
+											if (debug){
+												std.debug.print("continuing on bind {s} after evaluation\n", .{bind.name.text});
+											}
 											continue;
 										}
 									}
@@ -2594,18 +2606,17 @@ const Program = struct {
 						const bind = try expr_to_bind(self.mem, expr, err);
 						if (bind.expr.* == .list){
 							if (bind.expr.list.items.len != 0){
-								if (bind.expr.list.items[0].* == .atom){
-									if (bind.expr.list.items[0].atom.tag == .COMP){
-										self.binds.put(bind.name.text, bind)
-											catch unreachable;
-										const nop = self.mem.create(Expr)
-											catch unreachable;
-										nop.* = Expr{
-											.list = Buffer(*Expr).init(self.mem.*)
-										};
-										return nop;
-									}
+								self.binds.put(bind.name.text, bind)
+									catch unreachable;
+								const nop = self.mem.create(Expr)
+									catch unreachable;
+								nop.* = Expr{
+									.list = Buffer(*Expr).init(self.mem.*)
+								};
+								if (debug){
+									std.debug.print("continuing on nested bind {s}, returning nop\n", .{bind.name.text});
 								}
+								return nop;
 							}
 						}
 						expr.list.items[3] = try self.descend(expr.list.items[3], vm_target, err);
@@ -2624,6 +2635,9 @@ const Program = struct {
 							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected symbol for comp vm target\n", .{}))
 								catch unreachable;
 							return ParseError.UnexpectedToken;
+						}
+						if (debug){
+							std.debug.print("computing for comp in vm {s}\n", .{expr.list.items[1].atom.text});
 						}
 						return try self.compute(expr.list.items[2].list, expr.list.items[1].atom, err, true);
 					}
