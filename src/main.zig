@@ -1399,6 +1399,41 @@ const Program = struct {
 			std.debug.assert(expr.list.items[0].* == .atom);
 			switch(expr.list.items[0].atom.tag){
 				.REIF => {
+					const clear = self.mem.create(Expr)
+						catch unreachable;
+					clear.* = Expr{
+						.list = Buffer(*Expr).init(self.mem.*)
+					};
+					const movop = self.mem.create(Expr)
+						catch unreachable;
+					movop.* = Expr{
+						.atom = Token{
+							.pos = 0,
+							.tag = .MOV,
+							.text = self.mem.dupe(u8, "mov") catch unreachable
+						}
+					};
+					const movreg = self.mem.create(Expr)
+						catch unreachable;
+					movreg.* = expr.list.items[1].*;
+					const zero = self.mem.create(Expr)
+						catch unreachable;
+					zero.* = Expr{
+						.atom = Token{
+							.pos = 0,
+							.tag = .NUM,
+							.text = self.mem.dupe(u8, "0") catch unreachable
+						}
+					};
+					clear.list.append(movop)
+						catch unreachable;
+					clear.list.append(movreg)
+						catch unreachable;
+					clear.list.append(zero)
+						catch unreachable;
+					normalized.insert(i, clear)
+						catch unreachable;
+					i += 1;
 					const large = std.fmt.parseInt(u64, expr.list.items[2].atom.text, 16)
 						catch unreachable;
 					for (0..8) |byte| {
@@ -1423,7 +1458,7 @@ const Program = struct {
 							catch unreachable;
 						const buf = self.mem.alloc(u8, 8)
 							catch unreachable;
-						const slice = std.fmt.bufPrint(buf, "{x}", .{(large >> @truncate(byte*8))&0xff})
+						const slice = std.fmt.bufPrint(buf, "{x}", .{(large >> @truncate((7-byte)*8))&0xff})
 							catch unreachable;
 						segment.* = Expr{
 							.atom = Token{
@@ -1469,7 +1504,7 @@ const Program = struct {
 							.atom = Token{
 								.pos = 0,
 								.tag=.NUM,
-								.text=self.mem.dupe(u8, "10")
+								.text=self.mem.dupe(u8, "8")
 									catch unreachable
 							}
 						};
