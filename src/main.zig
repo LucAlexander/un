@@ -637,6 +637,7 @@ const Program = struct {
 	mem: *const std.mem.Allocator,
 	config: ir.Config,
 	vm: Map(*ir.VM),
+	global_reif: Reif,
 	
 	pub fn init(mem: *const std.mem.Allocator) Program {
 		const config = ir.Config{
@@ -644,7 +645,7 @@ const Program = struct {
 			.screen_height = 1,
 			.cores = 4,
 			.mem_size = 0x100000,
-			.mem = mem.*
+			.mem = mem.*,
 		};
 		var irmap = Map(*ir.VM).init(mem.*);
 		const vm = mem.create(ir.VM)
@@ -656,6 +657,7 @@ const Program = struct {
 			.binds = Map(Bind).init(mem.*),
 			.mem=mem,
 			.config = config,
+			.global_reif = Reif.init(mem),
 			.vm = irmap
 		};
 	}
@@ -755,11 +757,11 @@ const Program = struct {
 		}
 	}
 
-	pub fn normalize(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: *Expr, full: bool) ?*Expr {
+	pub fn normalize(self: *Program, normalized: *Buffer(*Expr), expr: *Expr, full: bool) ?*Expr {
 		if (expr.* == .list){
 			if (expr.list.items.len == 1){
 				if (expr.list.items[0].* == .list){
-					return self.normalize(normalized, reif, expr.list.items[0], full);
+					return self.normalize(normalized, expr.list.items[0], full);
 				}
 			}
 		}
@@ -776,7 +778,7 @@ const Program = struct {
 				continue;
 			}
 			if (inst.list.items[0].* == .list){
-				const flattened = self.normalize(normalized, reif, inst, true);
+				const flattened = self.normalize(normalized, inst, true);
 				if (flattened == null){
 					std.debug.print("could not flatten nested block\n", .{});
 					return null;
@@ -789,7 +791,7 @@ const Program = struct {
 						std.debug.print("Expected 1 argument for reg or label\n", .{});
 						return null;
 					}
-					if (self.expect_token(normalized, reif, &inst.list.items[1])){
+					if (self.expect_token(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -802,8 +804,8 @@ const Program = struct {
 						std.debug.print("Expected 2 arguments for reif\n", .{});
 						return null;
 					}
-					if (self.expect_register(normalized, reif, &inst.list.items[1])){
-						const adr = reif.add_relation(inst.list.items[2]);
+					if (self.expect_register(normalized, &inst.list.items[1])){
+						const adr = self.global_reif.add_relation(inst.list.items[2]);
 						const buf = self.mem.alloc(u8, 20)
 							catch unreachable;
 						const s = std.fmt.bufPrint(buf, "{x}", .{adr})
@@ -828,18 +830,18 @@ const Program = struct {
 						std.debug.print("Expected 2 arguments for mov\n", .{});
 						return null;
 					}
-					if (self.expect_register(normalized, reif, &inst.list.items[1])){
-						if (self.expect_dregister(normalized, reif, inst.list.items[2])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
+						if (self.expect_dregister(normalized, inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_register(normalized, reif, &inst.list.items[2])){
+						if (self.expect_register(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_token(normalized, reif, &inst.list.items[2])){
+						if (self.expect_token(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -847,18 +849,18 @@ const Program = struct {
 						std.debug.print("mov unable to match second argument\n", .{});
 						return null;
 					}
-					if (self.expect_dregister(normalized, reif, inst.list.items[1])){
-						if (self.expect_dregister(normalized, reif, inst.list.items[2])){
+					if (self.expect_dregister(normalized, inst.list.items[1])){
+						if (self.expect_dregister(normalized, inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_register(normalized, reif, &inst.list.items[2])){
+						if (self.expect_register(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
 						}
-						if (self.expect_token(normalized, reif, &inst.list.items[2])){
+						if (self.expect_token(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -874,9 +876,9 @@ const Program = struct {
 						std.debug.print("Expected 3 arguments for binary alu operation\n", .{});
 						return null;
 					}
-					if (self.expect_register(normalized, reif, &inst.list.items[1])){
-						if (self.expect_alu_arg(normalized, reif, &inst.list.items[2])){
-							if (self.expect_alu_arg(normalized, reif, &inst.list.items[3])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
+						if (self.expect_alu_arg(normalized, &inst.list.items[2])){
+							if (self.expect_alu_arg(normalized, &inst.list.items[3])){
 								normalized.append(inst)
 									catch unreachable;
 								continue;
@@ -891,8 +893,8 @@ const Program = struct {
 						std.debug.print("Expected 2 arguments for unary alu operation\n", .{});
 						return null;
 					}
-					if (self.expect_register(normalized, reif, &inst.list.items[1])){
-						if (self.expect_alu_arg(normalized, reif, &inst.list.items[2])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
+						if (self.expect_alu_arg(normalized, &inst.list.items[2])){
 							normalized.append(inst)
 								catch unreachable;
 							continue;
@@ -906,7 +908,7 @@ const Program = struct {
 						std.debug.print("jump or call expected target\n", .{});
 						return null;
 					}
-					if (self.expect_token(normalized, reif, &inst.list.items[1])){
+					if (self.expect_token(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -919,7 +921,7 @@ const Program = struct {
 						std.debug.print("Expected argument for ret\n", .{});
 						return null;
 					}
-					if (self.expect_alu_arg(normalized, reif, &inst.list.items[1])){
+					if (self.expect_alu_arg(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -932,7 +934,7 @@ const Program = struct {
 						std.debug.print("Expected argument for push or pop\n", .{});
 						return null;
 					}
-					if (self.expect_register(normalized, reif, &inst.list.items[1])){
+					if (self.expect_register(normalized, &inst.list.items[1])){
 						normalized.append(inst)
 							catch unreachable;
 						continue;
@@ -969,8 +971,7 @@ const Program = struct {
 			std.debug.print("\n", .{});
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
-		var reif = Reif.init(self.mem);
-		if (self.normalize(&normalized, &reif, programexpr, true) == null){
+		if (self.normalize(&normalized, programexpr, true) == null){
 			std.debug.print("Failed normalization parse\n", .{});
 			return null;
 		}
@@ -1285,7 +1286,7 @@ const Program = struct {
 		}
 		return ReifableRepr{
 			.parsed = parsed,
-			.reif = reif
+			.reif = self.global_reif
 		};
 	}
 
@@ -2408,34 +2409,34 @@ const Program = struct {
 		i.* += 1;
 	}
 
-	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: **Expr) bool {
-		return (self.expect_register(normalized, reif, expr) or self.expect_token(normalized, reif, expr));
+	pub fn expect_alu_arg(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
+		return (self.expect_register(normalized, expr) or self.expect_token(normalized, expr));
 	}
 
-	pub fn expect_register(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: **Expr) bool {
-		return self.expect_token(normalized, reif, expr);
+	pub fn expect_register(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
+		return self.expect_token(normalized, expr);
 	}
 
-	pub fn expect_dregister(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: *Expr) bool {
+	pub fn expect_dregister(self: *Program, normalized: *Buffer(*Expr), expr: *Expr) bool {
 		if (expr.* == .atom){
 			return false;
 		}
 		if (expr.list.items.len != 2){
 			return false;
 		}
-		if (self.expect_register(normalized, reif, &expr.list.items[1])){
+		if (self.expect_register(normalized, &expr.list.items[1])){
 			return true;
 		}
-		if (self.normalize(normalized, reif, expr.list.items[1], false)) |norm| {
+		if (self.normalize(normalized, expr.list.items[1], false)) |norm| {
 			expr.list.items[1] = norm;
-			return self.expect_register(normalized, reif, &expr.list.items[1]);
+			return self.expect_register(normalized, &expr.list.items[1]);
 		}
 		return false;
 	}
 
-	pub fn expect_token(self: *Program, normalized: *Buffer(*Expr), reif: *Reif, expr: **Expr) bool {
+	pub fn expect_token(self: *Program, normalized: *Buffer(*Expr), expr: **Expr) bool {
 		if (expr.*.* == .list){
-			if (self.normalize(normalized, reif, expr.*, false)) |norm| {
+			if (self.normalize(normalized, expr.*, false)) |norm| {
 				expr.* = norm;
 				return true;
 			}
@@ -2551,7 +2552,7 @@ const Program = struct {
 					continue;
 				},
 				.reif_sym => {
-					if (reif.reverse.get(elem & 0xffffffff)) |sym| {
+					if (reif.reverse.get(elem)) |sym| {
 						output.list.append(sym)
 							catch unreachable;
 						continue;
@@ -2559,7 +2560,7 @@ const Program = struct {
 					unreachable;
 				},
 				.reif_str => {
-					if (reif.reverse.get(elem & 0xffffffff)) |sym| {
+					if (reif.reverse.get(elem)) |sym| {
 						output.list.append(sym)
 							catch unreachable;
 						continue;
@@ -2996,6 +2997,10 @@ const Reif = struct {
 			catch unreachable;
 		return (ptr*8) | reifPtr;
 	}
+
+	pub fn reset_ephemeral_static_region(self: *Reif) void {
+		self.static = Buffer([]u64).init(self.mem.*);
+	}
 };
 
 pub fn apply_args(mem: *const std.mem.Allocator, expr: *Expr, bind: Bind, err: *Buffer(Error)) ParseError!*Expr {
@@ -3088,3 +3093,4 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	internal_uid = new;
 	return new;
 }
+//TODO reifable reverse must be non ephemeral for any useful usage
