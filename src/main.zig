@@ -953,6 +953,9 @@ const Program = struct {
 				}
 			}
 		}
+		if (expr.list.items[expr.list.items.len-1].* == .atom){
+			return expr.list.items[expr.list.items.len-1];
+		}
 		return expr.list.items[expr.list.items.len-1].list.items[0];
 	}
 
@@ -2530,7 +2533,7 @@ const Program = struct {
 				.reif_val => {
 					const buf = self.mem.alloc(u8, 20)
 						catch unreachable;
-					const slice = std.fmt.bufPrint(buf, "{}", .{elem & 0xffffffff})
+					const slice = std.fmt.bufPrint(buf, "{x}", .{elem & 0xffffffff})
 						catch unreachable;
 					const loc = self.mem.create(Expr)
 						catch unreachable;
