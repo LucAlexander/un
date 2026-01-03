@@ -1,0 +1,82 @@
+(use "const_buffer.un")
+
+(bind untag (y) 
+	((uid (z) (
+		(reg z)
+		(mov z ffff)
+		(shl z z 8)
+		(or z z ff)
+		(shl z z 8)
+		(or z z ff)
+		(and y y z)))))
+
+(bind nop ()
+	((uid (x) (
+		(reg x)
+		(mov x x)))))
+
+(bind comment (rest)
+	(bind comment_expansion () ()))
+
+(bind event (name arg)
+	((nop)))
+
+(bind source (name)
+	(bind name (arg)
+		((uid (x) (
+			(reg x)
+			(event name arg)
+			(x))))))
+
+(bind sink (name)
+	(bind name (arg)
+		((event name arg))))
+
+(bind constraint_address ()
+	(comp scratch ((
+		(mov r0 0)
+		(mov (at r0) 1)
+		(mov r11 r0)
+		(add r0 r0 8)
+		(mov r1 FFFF)
+		(mov (at r0) r1)
+		(mov r0 0)
+		(int r0)))))
+
+(bind constraint_setup ()
+	(comp constraint
+		((uid (x) (
+			(reg x)
+			(mov x (constraint_address))
+			(mov (at x) 1)
+			(mov r11 x)
+			(add x x 8)
+			(mov (at x) 8)
+			(mov x 0)
+			(int x))))))
+
+(bind constraint (name)
+	(comp constraint
+		((uid (x y) (
+			(reg x)
+			(reg y)
+			(mov x (constraint_address))
+			(mov r11 x)
+			(add x x 8)
+			(mov y (at x))
+			(add y y 8)
+			(mov (at x) y)
+			(add x x y)
+			(reif y name)
+			(mov (at x) y)
+			(mov x 0)
+			(int x))))))
+
+(bind info (key val)
+	((nop)))
+
+(bind define (name args body)
+	(bind name (args) (
+		(info "called" name)
+		(body))))
+
