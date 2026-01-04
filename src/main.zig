@@ -2563,12 +2563,30 @@ const Program = struct {
 					unreachable;
 				},
 				.reif_str => {
-					if (reif.reverse.get(elem)) |sym| {
-						output.list.append(sym)
-							catch unreachable;
-						continue;
+					const ptr = (elem & 0xffffffff) >> 3;
+					const len = vm.memory.words[ptr];
+					var si: u64 = 0;
+					const string = self.mem.alloc(u8, 2+len)
+						catch unreachable;
+					string[si] = '"';
+					si += 1;
+					while (si < (len+1)) {
+						string[si] = @truncate(vm.memory.words[ptr + si]);
+						si += 1;
 					}
-					unreachable;
+					string[si] = '"';
+					const sym = self.mem.create(Expr)
+						catch unreachable;
+					sym.* = Expr{
+						.atom = Token{
+							.text = string,
+							.pos = 0,
+							.tag = .STR
+						}
+					};
+					output.list.append(sym)
+						catch unreachable;
+					continue;
 				}
 			}
 		}
