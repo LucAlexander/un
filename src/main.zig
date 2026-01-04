@@ -2950,7 +2950,7 @@ const Reif = struct {
 				var buffer = self.mem.alloc(u64, expr.atom.text.len-1)
 					catch unreachable;
 				var i:u64 = 0;
-				buffer[i] = expr.atom.text.len-1;
+				buffer[i] = expr.atom.text.len-2;
 				i += 1;
 				for (expr.atom.text[1..expr.atom.text.len-1]) |char| {
 					buffer[i] = char;
@@ -2973,7 +2973,7 @@ const Reif = struct {
 		var buffer = self.mem.alloc(u64, expr.list.items.len+1)
 			catch unreachable;
 		var i:u64 = 0;
-		buffer[i] = expr.list.items.len;
+		buffer[i] = expr.list.items.len-1;
 		i += 1;
 		for (expr.list.items) |sub| {
 			buffer[i] = self.add_relation(sub);
