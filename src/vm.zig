@@ -1329,7 +1329,7 @@ pub fn jmp(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jmp\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	core.reg[rip] +%= @bitCast(off);
 	return true;
 }
@@ -1339,7 +1339,7 @@ pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jeq\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] == 0){
 		ip.* +%= @bitCast(off);
 		return true;
@@ -1353,7 +1353,7 @@ pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jne\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] != 0){
 		ip.* +%= @bitCast(off);
 		return true;
@@ -1367,7 +1367,7 @@ pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jlt\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] == 1){
 		ip.* +%= @bitCast(off);
 		return true;
@@ -1381,7 +1381,7 @@ pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jle\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] < 2){
 		ip.* +%= @bitCast(off);
 		return true;
@@ -1395,7 +1395,7 @@ pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jgt\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] == 2){
 		ip.* +%= @bitCast(off);
 		return true;
@@ -1409,7 +1409,7 @@ pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("jge\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] > 1){
 		ip.* +%= @bitCast(off);
 		return true;
@@ -1423,7 +1423,7 @@ pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		std.debug.print("call\n", .{});
 	}
 	const inst = vm.memory.half_words[ip.*];
-	const off:i64 = @intCast((inst & 0xFFFF0000) >> 0x10);
+	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	core.reg[rsp] -= 8;
 	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rip]+1;
 	core.reg[rsp] -= 8;

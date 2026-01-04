@@ -1311,7 +1311,7 @@ const Program = struct {
 							const current: i16 = @bitCast(@as(u16, @truncate(i)));
 							const buf = self.mem.alloc(u8, 20)
 								catch unreachable;
-							const slice = std.fmt.bufPrint(buf, "{x}", .{@as(u16, @bitCast(current -% offset))})
+							const slice = std.fmt.bufPrint(buf, "{x}", .{@as(u16, @bitCast(offset -% current))})
 								catch unreachable;
 							const loc = self.mem.create(Expr)
 								catch unreachable;
