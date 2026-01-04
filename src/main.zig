@@ -748,7 +748,7 @@ const Program = struct {
 									}
 								}
 							}
-							return evaluated;
+							return self.descend(evaluated, vm_target, err);
 						}
 					}
 					return candidate;
@@ -771,7 +771,7 @@ const Program = struct {
 		}
 		for (expr.list.items[0..limit]) |inst| {
 			if (inst.* == .atom){
-				std.debug.print("atom in execution block\n", .{});
+				std.debug.print("atom in execution block {s}\n", .{inst.atom.text});
 				return null;
 			}
 			if (inst.list.items.len == 0){
