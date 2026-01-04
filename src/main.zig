@@ -2492,6 +2492,7 @@ const Program = struct {
 			vm.?.load_bytes(offset, reif_bytes);
 			offset += reif_bytes.len;
 		}
+		self.global_reif.reset_ephemeral_static_region();
 		const start = 0x200;
 		vm.?.load_bytes(start, bytecode);
 		var context = ir.Context.init(self.config, vm.?);
@@ -3003,7 +3004,7 @@ const Reif = struct {
 	}
 
 	pub fn reset_ephemeral_static_region(self: *Reif) void {
-		self.static = Buffer([]u64).init(self.mem.*);
+		self.static.clearRetainingCapacity();
 	}
 };
 
@@ -3097,4 +3098,3 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	internal_uid = new;
 	return new;
 }
-//TODO reifable reverse must be non ephemeral for any useful usage
