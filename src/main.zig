@@ -125,7 +125,18 @@ pub fn main() !void {
 		return;
 	};
 	if (!eval){
-		write_out(outfilename, val);
+		var normalized = Buffer(*Expr).init(program.mem.*);
+		if (program.normalize(&normalized, val, true) == null){
+			std.debug.print("Failed normalization parse\n", .{});
+			return;
+		}
+		program.color(&normalized);
+		program.flatten_interrupts(&normalized);
+		program.inscribe_labels(&normalized);
+		var final = Expr{
+			.list = normalized
+		};
+		write_out(outfilename, &final);
 	}
 }
 
@@ -138,6 +149,7 @@ pub fn write_out(outfile: []u8, val: *Expr) void {
 	write_expr(out, val, 1);
 }
 
+
 pub fn write_expr(out:std.fs.File, expr: *Expr, depth: u64) void {
 	for (0..depth) |_| {
 		out.writer().print(" ", .{})
@@ -147,8 +159,26 @@ pub fn write_expr(out:std.fs.File, expr: *Expr, depth: u64) void {
 		catch unreachable;
 	switch (expr.*){
 		.atom => {
-			out.writer().print("{s} ", .{expr.atom.text})
-				catch unreachable;
+			switch (expr.atom.tag){
+				.REG0 => { out.writer().print("r0 ", .{}) catch unreachable; },
+				.REG1 => { out.writer().print("r1 ", .{}) catch unreachable; },
+				.REG2 => { out.writer().print("r2 ", .{}) catch unreachable; },
+				.REG3 => { out.writer().print("r3 ", .{}) catch unreachable; },
+				.REG4 => { out.writer().print("r4 ", .{}) catch unreachable; },
+				.REG5 => { out.writer().print("r5 ", .{}) catch unreachable; },
+				.REG6 => { out.writer().print("r6 ", .{}) catch unreachable; },
+				.REG7 => { out.writer().print("r7 ", .{}) catch unreachable; },
+				.REG8 => { out.writer().print("r8 ", .{}) catch unreachable; },
+				.REG9 => { out.writer().print("r9 ", .{}) catch unreachable; },
+				.REG10 => { out.writer().print("r10 ", .{}) catch unreachable; },
+				.REG11 => { out.writer().print("r11 ", .{}) catch unreachable; },
+				.SPTR => { out.writer().print("sp ", .{}) catch unreachable; },
+				.FPTR => { out.writer().print("fp ", .{}) catch unreachable; },
+				else => {
+					out.writer().print("{s} ", .{expr.atom.text})
+						catch unreachable;
+				}
+			}
 		},
 		.list => {
 			for (expr.list.items) |sub| {
@@ -158,8 +188,26 @@ pub fn write_expr(out:std.fs.File, expr: *Expr, depth: u64) void {
 					write_expr(out, sub, depth+1);
 				}
 				else{
-					out.writer().print("{s} ", .{sub.atom.text})
-						catch unreachable;
+					switch (sub.atom.tag){
+						.REG0 => { out.writer().print("r0 ", .{}) catch unreachable; },
+						.REG1 => { out.writer().print("r1 ", .{}) catch unreachable; },
+						.REG2 => { out.writer().print("r2 ", .{}) catch unreachable; },
+						.REG3 => { out.writer().print("r3 ", .{}) catch unreachable; },
+						.REG4 => { out.writer().print("r4 ", .{}) catch unreachable; },
+						.REG5 => { out.writer().print("r5 ", .{}) catch unreachable; },
+						.REG6 => { out.writer().print("r6 ", .{}) catch unreachable; },
+						.REG7 => { out.writer().print("r7 ", .{}) catch unreachable; },
+						.REG8 => { out.writer().print("r8 ", .{}) catch unreachable; },
+						.REG9 => { out.writer().print("r9 ", .{}) catch unreachable; },
+						.REG10 => { out.writer().print("r10 ", .{}) catch unreachable; },
+						.REG11 => { out.writer().print("r11 ", .{}) catch unreachable; },
+						.SPTR => { out.writer().print("sp ", .{}) catch unreachable; },
+						.FPTR => { out.writer().print("fp ", .{}) catch unreachable; },
+						else => {
+							out.writer().print("{s} ", .{sub.atom.text})
+								catch unreachable;
+						}
+					}				
 				}
 			}
 		}
@@ -974,7 +1022,7 @@ const Program = struct {
 		if (debug){
 			std.debug.print("Normalizing target: \n", .{});
 			show_expr(programexpr, 1);
-			std.debug.print("\n", .{});
+		std.debug.print("\n", .{});
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		if (self.normalize(&normalized, programexpr, true) == null){
