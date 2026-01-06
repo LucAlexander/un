@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = true;
+var debug = false;
 
 const Error = struct {
 	message: []u8,
@@ -772,7 +772,9 @@ const Program = struct {
 		}
 		for (expr.list.items[0..limit]) |inst| {
 			if (inst.* == .atom){
-				std.debug.print("atom in execution block {s}\n", .{inst.atom.text});
+				if (debug){
+					std.debug.print("atom in execution block {s}\n", .{inst.atom.text});
+				}
 				return null;
 			}
 			if (inst.list.items.len == 0){
