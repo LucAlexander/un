@@ -22,7 +22,6 @@ const TOKEN = enum(u64) {
 	STR,
 	CHAR,
 	COMP,
-	ERR,
 	FLAT,
 	UID,
 	REG,
@@ -349,7 +348,6 @@ pub fn tokenize(mem: *const std.mem.Allocator, text: []u8, err: *Buffer(Error)) 
 	keywords.put("bind", .BIND) catch unreachable;
 	keywords.put("use", .USE) catch unreachable;
 	keywords.put("flat", .FLAT) catch unreachable;
-	keywords.put("err", .ERR) catch unreachable;
 	keywords.put("uid", .UID) catch unreachable;
 	keywords.put("comp", .COMP) catch unreachable;
 	keywords.put("reg", .REG) catch unreachable;
@@ -709,6 +707,9 @@ const Program = struct {
 							try self.flatten_use(vm_target, subprogram, err);
 							continue;
 						}
+					}
+					else if (debug){
+						std.debug.print("head was not an atom\n", .{});
 					}
 					const candidate = try self.descend(expr, vm_target, err);
 					if (candidate.* == .list){
@@ -2635,15 +2636,6 @@ const Program = struct {
 					break;
 				}
 				if (expr.list.items[0].* == .atom){
-					if (expr.list.items[0].atom.tag == .ERR){
-						if (expr.list.items.len > 1){
-							if (expr.list.items[1].* == .atom){
-								err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Constraint error: {s}\n", .{expr.list.items[1].atom.text}))
-									catch unreachable;
-							}
-						}
-						return ParseError.Err;
-					}
 					if (expr.list.items[0].atom.tag == .FLAT){
 						if (expr.list.items.len != 2){
 							err.append(set_error(self.mem, expr.list.items[0].atom.pos, "Expected 2 arguments for flatten, found {}\n", .{expr.list.items.len}))

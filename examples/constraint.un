@@ -99,7 +99,7 @@
 			(mov y (at x))
 			(mov n y)
 			(add x x 8)
-			(mov target 80)
+			(mov target F800)
 			(mov r11 target)
 			(shr y y 3)
 			(mov (at target) y)
@@ -135,8 +135,22 @@
 		(mov (at r0) 0)
 		(int r0)))))
 
-(bind define (name args body)
+(bind term (name args body)
 	(bind name (args) (
 		(mov r0 (info "called" name))
 		(body))))
+
+(bind constrain (name key val body)
+	(bind name (key val) (body)))
+
+(bind err (message)
+	((uid (syscall x) (
+		(reg x)
+		(reg syscall)
+		(reif x message)
+		(mov syscall 1)
+		(int syscall)
+		(mov syscall 3)
+		(int syscall)
+		))))
 

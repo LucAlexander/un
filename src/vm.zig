@@ -1515,6 +1515,16 @@ pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		}
 		return true;
 	}
+	if (core.reg[r0] == 3){
+		std.debug.print("Core {} failed on user error state\n", .{active_core});
+		if (vm.context) |context| {
+			context.sleep_core();
+		}
+		if (debug){
+			std.debug.print("terminating {}\n", .{active_core});
+		}
+		std.debug.assert(false);
+	}
 	if (vm.context) |context| {
 		context.sleep_core();
 	}

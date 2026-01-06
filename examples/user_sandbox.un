@@ -1,0 +1,27 @@
+(use "constraint.un")
+
+(sink database_write)
+(source database_read)
+
+(constrain vacuous_false key val
+	((err "type error")))
+
+(constrain vacuous_true key val
+	((nop)))
+
+(term update_user data
+	((uid (x) (
+		(reg x)
+		(mov x (database_read data))
+		(database_write data)))))
+
+(bind main ()
+	((uid (x) (
+		(reg x)
+		(mov x (constraint_setup))
+		(mov x (constraint vacuous_false))
+		(update_user ("john" "pass123"))
+		(mov x 0)
+		(int x)))))
+
+(main)
