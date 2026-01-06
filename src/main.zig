@@ -130,6 +130,7 @@ pub fn main() !void {
 			std.debug.print("Failed normalization parse\n", .{});
 			return;
 		}
+		program.prepend_reif(&normalized);
 		program.color(&normalized);
 		program.flatten_interrupts(&normalized);
 		program.inscribe_labels(&normalized);
@@ -1022,7 +1023,7 @@ const Program = struct {
 		if (debug){
 			std.debug.print("Normalizing target: \n", .{});
 			show_expr(programexpr, 1);
-		std.debug.print("\n", .{});
+			std.debug.print("\n", .{});
 		}
 		var normalized = Buffer(*Expr).init(self.mem.*);
 		if (self.normalize(&normalized, programexpr, true) == null){
@@ -1342,6 +1343,166 @@ const Program = struct {
 			.parsed = parsed,
 			.reif = self.global_reif
 		};
+	}
+
+	pub fn prepend_reif(self: *Program, normalized: *Buffer(*Expr)) void {
+		var i: u64 = 0;
+		const reif = self.mem.create(Expr)
+			catch unreachable;
+		reif.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .REIF,
+				.text = self.mem.dupe(u8, "reif") catch unreachable
+			}
+		};
+		const reg = self.mem.create(Expr)
+			catch unreachable;
+		reg.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .REG0,
+				.text = self.mem.dupe(u8, "r0") catch unreachable
+			}
+		};
+		const addinst = self.mem.create(Expr)
+			catch unreachable;
+		addinst.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .ADD,
+				.text = self.mem.dupe(u8, "add") catch unreachable
+			}
+		};
+		const mov = self.mem.create(Expr)
+			catch unreachable;
+		mov.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .MOV,
+				.text = self.mem.dupe(u8, "mov") catch unreachable
+			}
+		};
+		const at = self.mem.create(Expr)
+			catch unreachable;
+		at.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .AT,
+				.text = self.mem.dupe(u8, "at") catch unreachable
+			}
+		};
+		const zero = self.mem.create(Expr)
+			catch unreachable;
+		zero.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .NUM,
+				.text = self.mem.dupe(u8, "0") catch unreachable
+			}
+		};
+		const eight = self.mem.create(Expr)
+			catch unreachable;
+		eight.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .NUM,
+				.text = self.mem.dupe(u8, "8") catch unreachable
+			}
+		};
+		const dereg = self.mem.create(Expr)
+			catch unreachable;
+		dereg.* = Expr{
+			.atom = Token{
+				.pos = 0,
+				.tag = .REG1,
+				.text = self.mem.dupe(u8, "r1") catch unreachable
+			}
+		};
+		const deref = self.mem.create(Expr)
+			catch unreachable;
+		deref.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		deref.list.append(at)
+			catch unreachable;
+		deref.list.append(dereg)
+			catch unreachable;
+		const setup = self.mem.create(Expr)
+			catch unreachable;
+		setup.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		setup.list.append(mov)
+			catch unreachable;
+		setup.list.append(dereg)
+			catch unreachable;
+		setup.list.append(zero)
+			catch unreachable;
+		normalized.insert(i, setup)
+			catch unreachable;
+		i += 1;
+		for (self.global_reif.static.items) |wordslice| {
+			for (wordslice) |word| {
+				const inst = self.mem.create(Expr)
+					catch unreachable;
+				inst.* = Expr{
+					.list = Buffer(*Expr).init(self.mem.*)
+				};
+				const semiexpr = self.mem.create(Expr)
+					catch unreachable;
+				const buf = self.mem.alloc(u8, 20)
+					catch unreachable;
+				const slice = std.fmt.bufPrint(buf, "{x}", .{word})
+					catch unreachable;
+				semiexpr.* = Expr{
+					.atom = Token{
+						.pos = 0,
+						.tag = .NUM,
+						.text = slice
+					}
+				};
+				inst.list.append(reif)
+					catch unreachable;
+				inst.list.append(reg)
+					catch unreachable;
+				inst.list.append(semiexpr)
+					catch unreachable;
+				normalized.insert(i, inst)
+					catch unreachable;
+				i += 1;
+				const write = self.mem.create(Expr)
+					catch unreachable;
+				write.* = Expr{
+					.list = Buffer(*Expr).init(self.mem.*)
+				};
+				write.list.append(mov)
+					catch unreachable;
+				write.list.append(deref)
+					catch unreachable;
+				write.list.append(reg)
+					catch unreachable;
+				normalized.insert(i, write)
+					catch unreachable;
+				i += 1;
+				const add = self.mem.create(Expr)
+					catch unreachable;
+				add.* = Expr{
+					.list = Buffer(*Expr).init(self.mem.*)
+				};
+				add.list.append(addinst)
+					catch unreachable;
+				add.list.append(dereg)
+					catch unreachable;
+				add.list.append(dereg)
+					catch unreachable;
+				add.list.append(eight)
+					catch unreachable;
+				normalized.insert(i, add)
+					catch unreachable;
+				i += 1;
+			}
+		}
 	}
 
 	pub fn inscribe_labels(self: *Program, normalized: *Buffer(*Expr)) void {
