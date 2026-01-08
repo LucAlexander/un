@@ -1515,6 +1515,10 @@ const Program = struct {
 			const expr = normalized.items[i];
 			switch (expr.list.items[0].atom.tag){
 				.JMP, .JEQ, .JNE, .JLE, .JGE, .JLT, .JGT, .CALL => {
+					if (expr.list.items[1].atom.tag == .NUM){
+						i += 1;
+						continue;
+					}
 					const key = self.mem.dupe(u8, expr.list.items[1].atom.text)
 						catch unreachable;
 					if (chainmap.getPtr(key)) |link| {
@@ -3257,7 +3261,7 @@ pub fn distribute_args(mem: *const std.mem.Allocator, argmap: Map(*Expr), expr: 
 						catch unreachable;
 					return loc;
 				}
-				return replacement; 
+				return replacement;
 			}
 			return expr;
 		},
