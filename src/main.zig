@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = false;
+var debug = true;
 
 const Error = struct {
 	message: []u8,
@@ -1007,6 +1007,9 @@ const Program = struct {
 		}
 		if (expr.list.items[expr.list.items.len-1].* == .atom){
 			return expr.list.items[expr.list.items.len-1];
+		}
+		if (expr.list.items[expr.list.items.len-1].list.items[0].* == .list){
+			return self.normalize(normalized, expr.list.items[expr.list.items.len-1].list.items[0], false);
 		}
 		return expr.list.items[expr.list.items.len-1].list.items[0];
 	}
