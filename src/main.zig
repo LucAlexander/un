@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = false;
+var debug = true;
 
 const Error = struct {
 	message: []u8,
@@ -1515,7 +1515,9 @@ const Program = struct {
 			const expr = normalized.items[i];
 			switch (expr.list.items[0].atom.tag){
 				.JMP, .JEQ, .JNE, .JLE, .JGE, .JLT, .JGT, .CALL => {
-					if (chainmap.getPtr(expr.list.items[1].atom.text)) |link| {
+					const key = self.mem.dupe(u8, expr.list.items[1].atom.text)
+						catch unreachable;
+					if (chainmap.getPtr(key)) |link| {
 						if (link.* == .waiting){
 							expr.list.items[1].atom.pos = i;
 							link.waiting.append(&expr.list.items[1])
@@ -1547,7 +1549,7 @@ const Program = struct {
 						expr.list.items[1].atom.pos = i;
 						newchain.waiting.append(&expr.list.items[1])
 							catch unreachable;
-						chainmap.put(expr.list.items[1].atom.text, newchain)
+						chainmap.put(key, newchain)
 							catch unreachable;
 					}
 					i += 1;
@@ -1567,7 +1569,9 @@ const Program = struct {
 							.tag = .NUM
 						}
 					};
-					if (chainmap.get(expr.list.items[1].atom.text)) |link| {
+					const key = self.mem.dupe(u8, expr.list.items[1].atom.text)
+						catch unreachable;
+					if (chainmap.get(key)) |link| {
 						if (link == .waiting){
 							for (link.waiting.items) |entry| {
 								const replacebuf = self.mem.alloc(u8, 20)
@@ -1588,7 +1592,7 @@ const Program = struct {
 							}
 						}
 					}
-					chainmap.put(expr.list.items[1].atom.text, LabelChain{
+					chainmap.put(key, LabelChain{
 						.fulfilled = replacement
 					}) catch unreachable;
 					_ = normalized.orderedRemove(i);
@@ -1606,7 +1610,10 @@ const Program = struct {
 		}
 		var it = chainmap.iterator();
 		while (it.next()) |entry| {
-			std.debug.assert(entry.value_ptr.* == .fulfilled);
+			if (entry.value_ptr.* != .fulfilled){
+				std.debug.print("Unfulfilled label jump {s}\n", .{entry.key_ptr.*});
+				std.debug.assert(false);
+			}
 		}
 	}
 
@@ -3242,7 +3249,15 @@ pub fn distribute_args(mem: *const std.mem.Allocator, argmap: Map(*Expr), expr: 
 	switch (expr.*){
 		.atom => {
 			if (argmap.get(expr.atom.text)) |replacement| {
-				return replacement;
+				if (replacement.* == .atom){
+					const loc = mem.create(Expr)
+						catch unreachable;
+					loc.* = replacement.*;
+					loc.atom.text = mem.dupe(u8, loc.atom.text)
+						catch unreachable;
+					return loc;
+				}
+				return replacement; 
 			}
 			return expr;
 		},
