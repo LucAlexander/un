@@ -1,5 +1,3 @@
-(use "buffer.un")
-
 (bind untag (y) (
 	(uid (z) (
 		(reg z)
@@ -11,5 +9,82 @@
 		(and y y z)))
 ))
 
-(bind comment text ())
+(bind tag_str (y)
+	((uid (z) (
+		(reg z)
+		(mov z 3)
+		(shl z z 20)
+		(or y y z)))))
 
+(bind tag_sym (y)
+	((uid (z) (
+		(reg z)
+		(mov z 2)
+		(shl z z 20)
+		(or y y z)))))
+
+(bind tag_ptr (y)
+	((uid (z) (
+		(reg z)
+		(mov z 1)
+		(shl z z 20)
+		(or y y z)))))
+
+(bind nop ()
+	((uid (x) (
+		(reg x)
+		(mov x x)))))
+
+(bind err (message)
+	((uid (syscall x) (
+		(reg x)
+		(reg syscall)
+		(reif x message)
+		(mov syscall 1)
+		(int syscall)
+		(mov syscall 3)
+		(int syscall)
+		))))
+
+(bind comment (text)
+	(bind COMMENT_BODY_EXPANSION () ()))
+
+(bind arena (address size)
+	((uid (x y) (
+		(reg x)
+		(reg y)
+		(mov x address)
+		(mov y 10)
+		(mov (at x) y)
+		(add x x 8)
+		(mov y size)
+		(mov x address)
+		(x)))))
+
+(bind alloc (arena size)
+	 ((uid (exit return w x y z len) (
+		(reg w)
+		(reg x)
+		(reg y)
+		(reg z)
+		(reg len)
+		(mov len size)
+		(mov x arena)
+		(mov y (at x))
+		(add x x 8)
+		(mov z (at x))
+		(add w y z)
+		(cmp w len)
+		(jge exit)
+		(mov x arena)
+		(add z y len)
+		(mov (at x) z)
+		(add x y x)
+		(jmp return)
+		(label exit)
+		(mov x 0)
+		(label return)
+		(x)))))
+
+(bind subarena (address size)
+	(arena (alloc address size) size))
