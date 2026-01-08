@@ -90,6 +90,7 @@
 		(mov (at x) y)
 		(add x x 8)
 		(mov y size)
+		(mov (at x) y)
 		(mov x address)
 		(x)))))
 
@@ -100,18 +101,17 @@
 		(reg y)
 		(reg z)
 		(reg len)
-		(mov len size)
 		(mov x address)
 		(mov y (at x))
 		(add x x 8)
 		(mov z (at x))
-		(add w y z)
-		(cmp w len)
+		(mov len size)
+		(add w y len)
+		(cmp w z)
 		(jge exit)
 		(mov x address)
-		(add z y len)
-		(mov (at x) z)
-		(add x y x)
+		(mov (at x) w)
+		(add x x w)
 		(jmp return)
 		(label exit)
 		(mov x 0)
@@ -121,7 +121,8 @@
 (bind subarena (address size)
 	((uid (x return) (
 		(reg x)
-		(if (alloc address size) (
+		(mov x (alloc address size))
+		(if (x) (
 			(mov x (arena x size))
 			(jmp return)
 		)(
