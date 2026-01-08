@@ -9,6 +9,15 @@
 		(and y y z)))
 ))
 
+(bind print (str)
+	((uid (x y) (
+		(reg x)
+		(reg y)
+		(mov x 1)
+		(reif y str)
+		(untag y)
+		(int x y)))))
+
 (bind tag_str (y)
 	((uid (z) (
 		(reg z)
@@ -49,6 +58,29 @@
 (bind comment (text)
 	(bind COMMENT_BODY_EXPANSION () ()))
 
+(bind if (condition consequent alternate)
+	((uid (x alt done) (
+		(reg x)
+		(mov x condition)
+		(cmp x 0)
+		(jeq alt)	
+		(consequent)
+		(jmp done)
+		(label alt)
+		(alternate)
+		(label done)))))
+
+(bind while (condition consequent)
+	((uid (x cons done) (
+		(reg x)
+		(label cons)
+		(mov x condition)
+		(cmp x 0)
+		(jeq done)	
+		(consequent)
+		(jmp cons)
+		(label done)))))
+
 (bind arena (address size)
 	((uid (x y) (
 		(reg x)
@@ -61,7 +93,7 @@
 		(mov x address)
 		(x)))))
 
-(bind alloc (arena size)
+(bind alloc (address size)
 	 ((uid (exit return w x y z len) (
 		(reg w)
 		(reg x)
@@ -69,14 +101,14 @@
 		(reg z)
 		(reg len)
 		(mov len size)
-		(mov x arena)
+		(mov x address)
 		(mov y (at x))
 		(add x x 8)
 		(mov z (at x))
 		(add w y z)
 		(cmp w len)
 		(jge exit)
-		(mov x arena)
+		(mov x address)
 		(add z y len)
 		(mov (at x) z)
 		(add x y x)
@@ -87,4 +119,14 @@
 		(x)))))
 
 (bind subarena (address size)
-	(arena (alloc address size) size))
+	((uid (x return) (
+		(reg x)
+		(if (alloc address size) (
+			(mov x (arena x size))
+			(jmp return)
+		)(
+			(mov x 0)
+			(jmp return)
+		))
+		(label return)
+		(x)))))
