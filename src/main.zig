@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = true;
+var debug = false;
 
 const Error = struct {
 	message: []u8,
@@ -3181,7 +3181,10 @@ const Reif = struct {
 					buffer[i] = char;
 					i += 1;
 				}
-				const ptr = self.static.items.len;
+				var ptr:u64 = 0;
+				for (self.static.items) |subbuffer| {
+					ptr += subbuffer.len;
+				}
 				self.static.append(buffer)
 					catch unreachable;
 				return (ptr*8) | reifStr;
@@ -3194,7 +3197,10 @@ const Reif = struct {
 				catch unreachable;
 			return sym;
 		}
-		const ptr = self.static.items.len;
+		var ptr:u64 = 0;
+		for (self.static.items) |subbuffer| {
+			ptr += subbuffer.len;
+		}
 		var buffer = self.mem.alloc(u64, expr.list.items.len+1)
 			catch unreachable;
 		var i:u64 = 0;
