@@ -3253,14 +3253,6 @@ pub fn distribute_args(mem: *const std.mem.Allocator, argmap: Map(*Expr), expr: 
 	switch (expr.*){
 		.atom => {
 			if (argmap.get(expr.atom.text)) |replacement| {
-				if (replacement.* == .atom){
-					const loc = mem.create(Expr)
-						catch unreachable;
-					loc.* = replacement.*;
-					loc.atom.text = mem.dupe(u8, loc.atom.text)
-						catch unreachable;
-					return loc;
-				}
 				return replacement;
 			}
 			return expr;
