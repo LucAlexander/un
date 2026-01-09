@@ -2864,7 +2864,6 @@ const Program = struct {
 						catch unreachable;
 				}
 			}
-			//TODO actually color
 			for (block.start .. block.end) |index| {
 				const inst = normalized.items[index];
 				switch (inst.list.items[0].atom.tag){
@@ -2896,6 +2895,7 @@ const Program = struct {
 					},
 					else => { }
 				}
+				self.color_expr(inst, reg_of);
 				new.append(inst)
 					catch unreachable;
 			}
@@ -2910,7 +2910,24 @@ const Program = struct {
 		return new;
 	}
 
-	pub fn color_read(expr: *Expr, block: *BBlock, reg_of: Map(TOKEN), var_of: AutoHashMap(TOKEN, *Expr), free_regs: Buffer(TOKEN), stack_position: *u64, stack_offsets: Map(u64), new: *Buffer(*Expr)) void {
+	pub fn color_expr(self: *Program, expr: *Expr, reg_of: Map(TOKEN)) void {
+		switch (expr.*){
+			.atom => {
+				if (reg_of.get(expr.atom.text)) |reg| {
+					expr.atom.tag = reg;
+					return;
+				}
+				std.debug.assert(false);
+			},
+			.list => {
+				for (expr.list.items) |sub| {
+					self.color_expr(sub, reg_of);
+				}
+			}
+		}
+	}
+
+	pub fn color_read(self: *Program, expr: *Expr, block: *BBlock, reg_of: Map(TOKEN), var_of: AutoHashMap(TOKEN, *Expr), free_regs: Buffer(TOKEN), stack_position: *u64, stack_offsets: Map(u64), new: *Buffer(*Expr)) void {
 		var variable = expr;
 		if (expr.* == .list){
 			variable = expr.list.items[1];
@@ -2945,7 +2962,7 @@ const Program = struct {
 		}
 	}
 
-	pub fn color_write(expr: *Expr, block: *BBlock, reg_of: Map(TOKEN), var_of: AutoHashMap(TOKEN, *Expr), free_regs: Buffer(TOKEN), stack_position: *u64, stack_offsets: Map(u64), new: *Buffer(*Expr)) void {
+	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: Map(TOKEN), var_of: AutoHashMap(TOKEN, *Expr), free_regs: Buffer(TOKEN), stack_position: *u64, stack_offsets: Map(u64), new: *Buffer(*Expr)) void {
 		var variable = expr;
 		if (expr.* == .list){
 			variable = expr.list.items[1];
