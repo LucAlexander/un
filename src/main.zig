@@ -2840,34 +2840,7 @@ const Program = struct {
 			for (block.live_in.items) |in| {
 				if (stack_offsets.get(in.atom.tag)) |offset| {
 					if (free_regs.items.len == 0){
-						const reg: TOKEN = undefined;
-						outer: for (free_regs.items) |candidate| {
-							for (block.live_out.items) |out| {
-								if (out == candidate){
-									continue :outer;
-								}
-							}
-							reg = candidate;
-							break;
-						}
-						if (var_of.get(reg)) |variable| {
-							if (stack_offsets.get(variable.atom.text)) |inner_offset| {
-								self.store_to_stack_offset(reg, inner_offset, &new);
-							}
-							else{
-								stack_offsets.put(variable.atom.text, stack_position)
-									catch unreachable;
-								self.push_to_stack_offset(reg, &new);
-								stack_position += 8;
-							}
-						}
-						else{
-							std.debug.assert(false);
-						}
-						reg_of.put(in.atom.text, reg)
-							catch unreachable;
-						var_of.put(reg, in)
-							catch unreachable;
+						self.spill(free_regs, block, stack_offsets, reg_of, var_of, &stack_position, &new);
 					}
 					else{
 						const reg = free_regs.removeInOrder(0)
@@ -2880,34 +2853,7 @@ const Program = struct {
 					}
 				}
 				else if (free_regs.items.len == 0){
-					const reg: TOKEN = undefined;
-					outer: for (free_regs.items) |candidate| {
-						for (block.live_out.items) |out| {
-							if (out == candidate){
-								continue :outer;
-							}
-						}
-						reg = candidate;
-						break;
-					}
-					if (var_of.get(reg)) |variable| {
-						if (stack_offsets.get(variable.atom.text)) |inner_offset| {
-							self.store_to_stack_offset(reg, inner_offset, &new);
-						}
-						else{
-							stack_offsets.put(variable.atom.text, stack_position)
-								catch unreachable;
-							self.push_to_stack_offset(reg, &new);
-							stack_position += 8;
-						}
-					}
-					else{
-						std.debug.assert(false);
-					}
-					reg_of.put(in.atom.text, reg)
-						catch unreachable;
-					var_of.put(reg, in)
-						catch unreachable;
+					self.spill(free_regs, block, stack_offsets, reg_of, var_of, &stack_position, &new);
 				}
 				else{
 					const reg = free_regs.removeInOrder(0)
@@ -2918,14 +2864,150 @@ const Program = struct {
 						catch unreachable;
 				}
 			}
+			//TODO actually color
 			for (block.start .. block.end) |index| {
 				const inst = normalized.items[index];
 				switch (inst.list.items[0].atom.tag){
-					// TODO
+					.MOV => {
+						self.color_write(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+						self.color_read(inst.list.items[2], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
+						self.color_write(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+						self.color_read(inst.list.items[2], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+						self.color_read(inst.list.items[3], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					.NOT, .COM => {
+						self.color_write(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+						self.color_read(inst.list.items[2], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					.CMP => {
+						self.color_read(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+						self.color_read(inst.list.items[2], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					.PSH => {
+						self.color_read(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					.POP => {
+						self.color_write(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					.REIF => {
+						self.color_write(inst.list.items[1], block, reg_of, var_of, free_regs, &stack_position, stack_offsets, new);
+					},
+					else => { }
 				}
+				new.append(inst)
+					catch unreachable;
 			}
+			 //At block exit:
+				 //For every variable v such that:
+				 //v is in a register and
+				 //v ∈ live_out[B]
+				 //Ensure:
+				 //store reg(v) → stack_slot[v]
+				 //This guarantees successors can reload.
 		}
 		return new;
+	}
+
+	pub fn color_read(expr: *Expr, block: *BBlock, reg_of: Map(TOKEN), var_of: AutoHashMap(TOKEN, *Expr), free_regs: Buffer(TOKEN), stack_position: *u64, stack_offsets: Map(u64), new: *Buffer(*Expr)) void {
+		var variable = expr;
+		if (expr.* == .list){
+			variable = expr.list.items[1];
+		}
+		if (reg_of.get(variable.atom.text)) |_| {
+			return;
+		}
+		if (stack_offsets.get(variable.atom.tag)) |offset| {
+			if (free_regs.items.len == 0){
+				self.spill(free_regs, block, stack_offsets, reg_of, var_of, stack_position, &new);
+			}
+			else{
+				const reg = free_regs.removeInOrder(0)
+					catch unreachable;
+				reg_of.put(variable.atom.text, reg)
+					catch unreachable;
+				var_of.put(reg, variable)
+					catch unreachable;
+				self.load_from_stack_offset(reg, offset, &new);
+			}
+		}
+		else if (free_regs.items.len == 0){
+			self.spill(free_regs, block, stack_offsets, reg_of, var_of, stack_position, &new);
+		}
+		else{
+			const reg = free_regs.removeInOrder(0)
+				catch unreachable;
+			reg_of.put(in.atom.text, reg)
+				catch unreachable;
+			var_of.put(reg, variable)
+				catch unreachable;
+		}
+	}
+
+	pub fn color_write(expr: *Expr, block: *BBlock, reg_of: Map(TOKEN), var_of: AutoHashMap(TOKEN, *Expr), free_regs: Buffer(TOKEN), stack_position: *u64, stack_offsets: Map(u64), new: *Buffer(*Expr)) void {
+		var variable = expr;
+		if (expr.* == .list){
+			variable = expr.list.items[1];
+		}
+		if (reg_of.get(variable.atom.text)) |_| {
+			return;
+		}
+		if (stack_offsets.get(variable.atom.tag)) |offset| {
+			if (free_regs.items.len == 0){
+				self.spill(free_regs, block, stack_offsets, reg_of, var_of, stack_position, &new);
+			}
+			else{
+				const reg = free_regs.removeInOrder(0)
+					catch unreachable;
+				reg_of.put(variable.atom.text, reg)
+					catch unreachable;
+				var_of.put(reg, variable)
+					catch unreachable;
+			}
+		}
+		else if (free_regs.items.len == 0){
+			self.spill(free_regs, block, stack_offsets, reg_of, var_of, stack_position, &new);
+		}
+		else{
+			const reg = free_regs.removeInOrder(0)
+				catch unreachable;
+			reg_of.put(in.atom.text, reg)
+				catch unreachable;
+			var_of.put(reg, variable)
+				catch unreachable;
+		}
+	}
+
+	pub fn spill(self: *Program, free_regs: Buffer(*Expr).init(self.mem.*), block: *BBlock, stack_offsets: Map(u64), reg_of: Map(TOKEN), var_of: AutoHashMap(Token, *Expr), stack_position: *u64, new: *Buffer(*Expr)) void {
+		const reg: TOKEN = undefined;
+		outer: for (free_regs.items) |candidate| {
+			for (block.live_out.items) |out| {
+				if (out == candidate){
+					continue :outer;
+				}
+			}
+			reg = candidate;
+			break;
+		}
+		if (var_of.get(reg)) |variable| {
+			if (stack_offsets.get(variable.atom.text)) |inner_offset| {
+				self.store_to_stack_offset(reg, inner_offset, &new);
+			}
+			else{
+				stack_offsets.put(variable.atom.text, stack_position.*)
+					catch unreachable;
+				self.push_to_stack_offset(reg, &new);
+				stack_position.* += 8;
+			}
+		}
+		else{
+			std.debug.assert(false);
+		}
+		reg_of.put(in.atom.text, reg)
+			catch unreachable;
+		var_of.put(reg, in)
+			catch unreachable;
 	}
 
 	pub fn push_to_stack_offset(self: *Program, reg: Token, new: *Buffer(*Expr)) void {
