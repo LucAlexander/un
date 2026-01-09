@@ -239,6 +239,9 @@ pub fn show_token(token: Token) void {
 	if (token.tag == .NUM){
 		std.debug.print("[numeric] ", .{});
 	}
+	if (token.tag == .STR){
+		std.debug.print("[str] ", .{});
+	}
 	if (token.tag == .REG0){
 		std.debug.print("[{}] ", .{token.tag});
 	}
@@ -857,6 +860,13 @@ const Program = struct {
 						return null;
 					}
 					if (self.expect_register(normalized, &inst.list.items[1])){
+						if (inst.list.items[2].* == .atom){
+							if (inst.list.items[2].atom.tag == .NUM){
+								normalized.append(inst)
+									catch unreachable;
+								continue;
+							}
+						}
 						const adr = self.global_reif.add_relation(inst.list.items[2]);
 						const buf = self.mem.alloc(u8, 20)
 							catch unreachable;
