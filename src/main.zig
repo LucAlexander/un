@@ -2687,12 +2687,15 @@ const Program = struct {
 		return true;
 	}
 
-	pub fn cfg_color(self: *Program, normalized: *Buffer(*Expr)) void {
+	pub fn cfg_color(self: *Program, normalized: *Buffer(*Expr)) Buffer(*Expr) {
 		const block_map = Map(*BBlock).init(self.mem.*);
 		const block_chain = Map(Buffer(*BBlock)).init(self.mem.*);
 		var current_block = self.mem.create(BBlock)
 			catch unreachable;
 		current_block.* = BBlock.init(self.mem, i);
+		const block_list = Buffer(*BBlock).init(self.mem.*);
+		block_list.append(current_block)
+			catch unreachable;
 		var i: u64 = 0;
 		while (i < normalized.items.len){
 			const expr = normalized.items[i];
@@ -2705,6 +2708,8 @@ const Program = struct {
 					next_block.prev.append(current_block)
 						catch unreachable;
 					current_block = next_block;
+					block_list.append(current_block)
+						catch unreachable;
 					if (block_chain.get(expr.list.items[1].atom.text)) |chain| {
 						for (chain.items) |block| {
 							block.next.append(current_block)
@@ -2717,7 +2722,6 @@ const Program = struct {
 					block_map.put(expr.list.items[1].atom.text, current_block)
 						catch unreachable;
 					i += 1;
-					if (block_chain)
 				},
 				.JMP => {
 					current_block.end = i;
@@ -2733,6 +2737,8 @@ const Program = struct {
 							catch unreachable;;
 					}
 					current_block = next_block;
+					block_list.append(current_block)
+						catch unreachable;
 					i += 1;
 				},
 				.JEQ, .JNE, .JGT, .JGE, .JLT, .jLE => {
@@ -2753,6 +2759,8 @@ const Program = struct {
 					next_block.prev.append(current_block)
 						catch unreachable;
 					current_block = next_block;
+					block_list.append(current_block)
+						catch unreachable;
 					i += 1;
 				},
 				.RET => {
@@ -2763,6 +2771,8 @@ const Program = struct {
 					next_block.prev.append(current_block)
 						catch unreachable;
 					current_block = next_block;
+					block_list.append(current_block)
+						catch unreachable;
 					i += 1;
 				},
 				.MOV => {
@@ -2809,7 +2819,431 @@ const Program = struct {
 		while (self.backward_dfs_cfg(current_block, visited)) {
 			visited.clearRetainingCapacity();
 		}
-		//TODO actual coloring
+		const new = Buffer(*Expr).init(self.mem.*);
+		for (block_list.items) |block| {
+			const reg_of = Map(TOKEN).init(self.mem.*);
+			const var_of = AutoHashMap(TOKEN, *Expr).init(self.mem.*);
+			const free_regs = Buffer(TOKEN).init(self.mem.*);
+			free_regs.append(.REG0) catch unreachable;
+			free_regs.append(.REG1) catch unreachable;
+			free_regs.append(.REG2) catch unreachable;
+			free_regs.append(.REG3) catch unreachable;
+			free_regs.append(.REG4) catch unreachable;
+			free_regs.append(.REG5) catch unreachable;
+			free_regs.append(.REG6) catch unreachable;
+			free_regs.append(.REG7) catch unreachable;
+			free_regs.append(.REG8) catch unreachable;
+			free_regs.append(.REG9) catch unreachable;
+			free_regs.append(.REG10) catch unreachable;
+			const stack_offsets = Map(u64).init(self.mem.*);
+			var stack_position: u64 = 0; // TODO may need to be tracked with an internal register
+			for (block.live_in.items) |in| {
+				if (stack_offsets.get(in.atom.tag)) |offset| {
+					if (free_regs.items.len == 0){
+						const reg: TOKEN = undefined;
+						outer: for (free_regs.items) |candidate| {
+							for (block.live_out.items) |out| {
+								if (out == candidate){
+									continue :outer;
+								}
+							}
+							reg = candidate;
+							break;
+						}
+						if (var_of.get(reg)) |variable| {
+							if (stack_offsets.get(variable.atom.text)) |inner_offset| {
+								self.store_to_stack_offset(reg, inner_offset, &new);
+							}
+							else{
+								stack_offsets.put(variable.atom.text, stack_position)
+									catch unreachable;
+								self.push_to_stack_offset(reg, &new);
+								stack_position += 8;
+							}
+						}
+						else{
+							std.debug.assert(false);
+						}
+						reg_of.put(in.atom.text, reg)
+							catch unreachable;
+						var_of.put(reg, in)
+							catch unreachable;
+					}
+					else{
+						const reg = free_regs.removeInOrder(0)
+							catch unreachable;
+						reg_of.put(in.atom.text, reg)
+							catch unreachable;
+						var_of.put(reg, in)
+							catch unreachable;
+						self.load_from_stack_offset(reg, offset, &new);
+					}
+				}
+				else if (free_regs.items.len == 0){
+					const reg: TOKEN = undefined;
+					outer: for (free_regs.items) |candidate| {
+						for (block.live_out.items) |out| {
+							if (out == candidate){
+								continue :outer;
+							}
+						}
+						reg = candidate;
+						break;
+					}
+					if (var_of.get(reg)) |variable| {
+						if (stack_offsets.get(variable.atom.text)) |inner_offset| {
+							self.store_to_stack_offset(reg, inner_offset, &new);
+						}
+						else{
+							stack_offsets.put(variable.atom.text, stack_position)
+								catch unreachable;
+							self.push_to_stack_offset(reg, &new);
+							stack_position += 8;
+						}
+					}
+					else{
+						std.debug.assert(false);
+					}
+					reg_of.put(in.atom.text, reg)
+						catch unreachable;
+					var_of.put(reg, in)
+						catch unreachable;
+				}
+				else{
+					const reg = free_regs.removeInOrder(0)
+						catch unreachable;
+					reg_of.put(in.atom.text, reg)
+						catch unreachable;
+					var_of.put(reg, in)
+						catch unreachable;
+				}
+			}
+			for (block.start .. block.end) |index| {
+				const inst = normalized.items[index];
+				switch (inst.list.items[0].atom.tag){
+					// TODO
+				}
+			}
+		}
+		return new;
+	}
+
+	pub fn push_to_stack_offset(self: *Program, reg: Token, new: *Buffer(*Expr)) void {
+		var psh = self.mem.create(Expr)
+			catch unreachable;
+		psh.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "psh") catch unreachable,
+				.pos = 0,
+				.tag = .PSH
+			}
+		};
+		const dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = reg
+			}
+		};
+		psh.append(op) catch unreachable;
+		psh.append(dest) catch unreachable;
+		new.append(psh) catch unreachable;
+	}
+
+	pub fn store_to_stack_offset(self: *Program, reg: Token, offset: u64, new: *Buffer(*Expr)) void {
+		var load = self.mem.create(Expr)
+			catch unreachable;
+		load.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		var op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		var dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		var src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "fp") catch unreachable,
+				.pos = 0,
+				.tag = .FPTR
+			}
+		};
+		load.list.append(op)
+			catch unreachable;
+		load.list.append(dest)
+			catch unreachable;
+		load.list.append(src)
+			catch unreachable;
+		var off = self.mem.create(Expr)
+			catch unreachable;
+		off.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "sub") catch unreachable,
+				.pos = 0,
+				.tag = .SUB
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		const buffer = self.mem.alloc(u8, 20)
+			catch unreachable;
+		const slice = std.fmt.bufPrint(buffer, "{x}", .{offset})
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = slice,
+				.pos = 0,
+				.tag = .NUM
+			}
+		};
+		off.list.append(op)
+			catch unreachable;
+		off.list.append(dest)
+			catch unreachable;
+		off.list.append(dest)
+			catch unreachable;
+		off.list.append(src)
+			catch unreachable;
+		var loc = self.mem.create(Expr)
+			catch unreachable;
+		loc.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = reg
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const at = self.mem.create(Expr)
+			catch unreachable;
+		at.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "at") catch unreachable,
+				.pos = 0,
+				.tag = .AT
+			}
+		};
+		const dref = self.mem.create(Expr)
+			catch unreachable;
+		dref.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		src.list.append(at)
+			catch unreachable;
+		src.list.append(dref)
+			catch unreachable;
+		loc.list.append(op)
+			catch unreachable;
+		loc.list.append(src)
+			catch unreachable;
+		loc.list.append(dest)
+			catch unreachable;
+		new.append(load) catch unreachable;
+		new.append(off) catch unreachable;
+		new.append(loc) catch unreachable;
+
+	}
+
+	pub fn load_from_stack_offset(self: *Program, reg: Token, offset: u64, new: *Buffer(*Expr)) void {
+		var load = self.mem.create(Expr)
+			catch unreachable;
+		load.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		var op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		var dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		var src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "fp") catch unreachable,
+				.pos = 0,
+				.tag = .FPTR
+			}
+		};
+		load.list.append(op)
+			catch unreachable;
+		load.list.append(dest)
+			catch unreachable;
+		load.list.append(src)
+			catch unreachable;
+		var off = self.mem.create(Expr)
+			catch unreachable;
+		off.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "sub") catch unreachable,
+				.pos = 0,
+				.tag = .SUB
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		const buffer = self.mem.alloc(u8, 20)
+			catch unreachable;
+		const slice = std.fmt.bufPrint(buffer, "{x}", .{offset})
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = slice,
+				.pos = 0,
+				.tag = .NUM
+			}
+		};
+		off.list.append(op)
+			catch unreachable;
+		off.list.append(dest)
+			catch unreachable;
+		off.list.append(dest)
+			catch unreachable;
+		off.list.append(src)
+			catch unreachable;
+		var loc = self.mem.create(Expr)
+			catch unreachable;
+		loc.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.pos = 0,
+				.tag = reg
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		const at = self.mem.create(Expr)
+			catch unreachable;
+		at.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "at") catch unreachable,
+				.pos = 0,
+				.tag = .AT
+			}
+		};
+		const dref = self.mem.create(Expr)
+			catch unreachable;
+		dref.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		src.list.append(at)
+			catch unreachable;
+		src.list.append(dref)
+			catch unreachable;
+		loc.list.append(op)
+			catch unreachable;
+		loc.list.append(dest)
+			catch unreachable;
+		loc.list.append(src)
+			catch unreachable;
+		new.append(load) catch unreachable;
+		new.append(off) catch unreachable;
+		new.append(loc) catch unreachable;
 	}
 
 	pub fn backward_dfs_cfg(self: *Program, current_block: *BBlock, visited: AutoHashMap(bool)) bool {
