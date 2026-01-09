@@ -2820,6 +2820,8 @@ const Program = struct {
 			visited.clearRetainingCapacity();
 		}
 		const new = Buffer(*Expr).init(self.mem.*);
+		const stack_offsets = Map(u64).init(self.mem.*);
+		var stack_position: u64 = 0; //TODO we'll try just making it global for now, we should run through in chronological order? I still dont know how im realistically suposed to track runtime stack values without storing them in another specially handled register
 		for (block_list.items) |block| {
 			const reg_of = Map(TOKEN).init(self.mem.*);
 			const var_of = AutoHashMap(TOKEN, *Expr).init(self.mem.*);
@@ -2835,8 +2837,6 @@ const Program = struct {
 			free_regs.append(.REG8) catch unreachable;
 			free_regs.append(.REG9) catch unreachable;
 			free_regs.append(.REG10) catch unreachable;
-			const stack_offsets = Map(u64).init(self.mem.*);
-			var stack_position: u64 = 0; // TODO may need to be tracked with an internal register
 			for (block.live_in.items) |in| {
 				if (stack_offsets.get(in.atom.tag)) |offset| {
 					if (free_regs.items.len == 0){
@@ -2899,13 +2899,19 @@ const Program = struct {
 				new.append(inst)
 					catch unreachable;
 			}
-			 //At block exit:
-				 //For every variable v such that:
-				 //v is in a register and
-				 //v ∈ live_out[B]
-				 //Ensure:
-				 //store reg(v) → stack_slot[v]
-				 //This guarantees successors can reload.
+			for (block.live_out.items) |out| {
+				if (reg_of.get(out.atom.text)) |reg| {
+					if (stack_offsets.get(out.atom.text)) |offset| {
+						self.store_to_stack_offset(reg, offset, new);
+					}
+					else{
+						stack_offsets.put(out.atom.text, stack_position.*)
+							catch unreachable;
+						self.push_to_stack_offset(reg, &new);
+						stack_position.* += 8;
+					}
+				}
+			}
 		}
 		return new;
 	}
@@ -3056,7 +3062,7 @@ const Program = struct {
 		new.append(psh) catch unreachable;
 	}
 
-	pub fn store_to_stack_offset(self: *Program, reg: Token, offset: u64, new: *Buffer(*Expr)) void {
+	pub fn store_to_stack_offset(self: *Program, reg: TOKEN, offset: u64, new: *Buffer(*Expr)) void {
 		var load = self.mem.create(Expr)
 			catch unreachable;
 		load.* = Expr{
@@ -3201,7 +3207,7 @@ const Program = struct {
 
 	}
 
-	pub fn load_from_stack_offset(self: *Program, reg: Token, offset: u64, new: *Buffer(*Expr)) void {
+	pub fn load_from_stack_offset(self: *Program, reg: TOKEN, offset: u64, new: *Buffer(*Expr)) void {
 		var load = self.mem.create(Expr)
 			catch unreachable;
 		load.* = Expr{
