@@ -2687,6 +2687,208 @@ const Program = struct {
 		return true;
 	}
 
+	pub fn cfg_color(self: *Program, normalized: *Buffer(*Expr)) void {
+		const block_map = Map(*BBlock).init(self.mem.*);
+		const block_chain = Map(Buffer(*BBlock)).init(self.mem.*);
+		var current_block = self.mem.create(BBlock)
+			catch unreachable;
+		current_block.* = BBlock.init(self.mem, i);
+		var i: u64 = 0;
+		while (i < normalized.items.len){
+			const expr = normalized.items[i];
+			switch (expr.list.items[0].atom.tag){
+				.LABEL => {
+					current_block.end = i-1;
+					const next_block = BBlock.init(self.mem, i);
+					current_block.next.append(next_block)
+						catch unreachable;
+					next_block.prev.append(current_block)
+						catch unreachable;
+					current_block = next_block;
+					if (block_chain.get(expr.list.items[1].atom.text)) |chain| {
+						for (chain.items) |block| {
+							block.next.append(current_block)
+								catch unreachable;
+							current_block.prev.append(block)
+								catch unreachable;
+						}
+						_ = block_chain.remove(expr.list.items[1].atom.text);
+					}
+					block_map.put(expr.list.items[1].atom.text, current_block)
+						catch unreachable;
+					i += 1;
+					if (block_chain)
+				},
+				.JMP => {
+					current_block.end = i;
+					const next_block = BBlock.init(self.mem, i+1);
+					if (block_map.get(expr.list.items[1].atom.text)) |exists| {
+						current_block.next.append(exists)
+							catch unreachable;
+						exists.prev.append(current_block)
+							catch unreachable;
+					}
+					else if (block_chain.get(expr.list.items[1].atom.text)) |buffer| {
+						buffer.append(current_block)
+							catch unreachable;;
+					}
+					current_block = next_block;
+					i += 1;
+				},
+				.JEQ, .JNE, .JGT, .JGE, .JLT, .jLE => {
+					current_block.end = i;
+					const next_block = BBlock.init(self.mem, i+1);
+					if (block_map.get(expr.list.items[1].atom.text)) |exists| {
+						current_block.next.append(exists)
+							catch unreachable;
+						exists.prev.append(current_block)
+							catch unreachable;
+					}
+					else if (block_chain.get(expr.list.items[1].atom.text)) |buffer| {
+						buffer.append(current_block)
+							catch unreachable;;
+					}
+					current_block.next.append(next_block)
+						catch unreachable;
+					next_block.prev.append(current_block)
+						catch unreachable;
+					current_block = next_block;
+					i += 1;
+				},
+				.RET => {
+					current_block.end = i;
+					const next_block = BBlock.init(self.mem, i+1);
+					current_block.next.append(next_block)
+						catch unreachable;
+					next_block.prev.append(current_block)
+						catch unreachable;
+					current_block = next_block;
+					i += 1;
+				},
+				.MOV => {
+					self.check_var_write(current_block, expr.list.items[1]);
+					self.check_var_read(current_block, expr.list.items[2]);
+					i += 1;
+				},
+				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
+					self.check_var_write(current_block, expr.list.items[1]);
+					self.check_var_read(current_block, expr.list.items[2]);
+					self.check_var_read(current_block, expr.list.items[3]);
+					i += 1;
+				},
+				.NOT, .COM => {
+					self.check_var_write(current_block, expr.list.items[1]);
+					self.check_var_read(current_block, expr.list.items[2]);
+					i += 1;
+				},
+				.CMP => {
+					self.check_var_read(current_block, expr.list.items[1];)
+					self.check_var_read(current_block, expr.list.items[2];)
+					i += 1;
+				},
+				.PSH => {
+					self.check_var_read(current_block, expr.list.items[1]);
+					i += 1;
+				},
+				.POP => {
+					self.check_var_write(current_block, expr.list.items[1]);
+					i += 1;
+				},
+				.REIF => {
+					self.chek_var_write(current_block, expr.list.items[1]);
+					i += 1;
+				},
+				else => {
+					 i += 1;
+					 continue;
+				}
+			}
+		}
+		current_block.end = i-1;
+		const visited = AutoHashMap(*BBlock, bool).init(self.mem.*);
+		while (self.backward_dfs_cfg(current_block, visited)) {
+			visited.clearRetainingCapacity();
+		}
+		//TODO actual coloring
+	}
+
+	pub fn backward_dfs_cfg(self: *Program, current_block: *BBlock, visited: AutoHashMap(bool)) bool {
+		if (visited.get(current_block)) |_| {
+			return false;
+		}
+		var changes = false;
+		visited.put(current_block, true)
+			catch unreachable;
+		for (current_block.next.items) |next| {
+			outer: for (next.live_in.items) |in| {
+				for (current_block.live_out.items) |out| {
+					if (in == out){
+						continue :outer;
+					}
+				}
+				current_block.live_out.append(in)
+					catch unreachable;
+				changes = true;
+			}
+		}
+		if (changes){
+			current_block.live_in.clearRetainingCapacity();
+			current_block.live_in.appendSlice(current_block.read.items)
+				catch unreachable;
+			outer: for (current_block.live_out.items) |out| {
+				for (current_block.write.items) |def| {
+					if (out == def){
+						continue :outer;
+					}
+				}
+				current_block.live_in.append(out)
+					catch unreachable;
+			}
+		}
+		for (current_block.prev.items) |prev| {
+			changes = changes or self.backward_dfs_cfg(prev, visited);
+		}
+		return changes;
+	}
+
+	pub fn self.check_var_read(self: *Program, current_block: *BBlock, expr: *Expr) void {
+		if (expr.* == .list){
+			std.debug.assert(expr.list.items[0].* == .atom);
+			std.debug.assert(expr.list.items[0].atom.tag == .AT);
+			for (current_block.write.items) |candidate| {
+				if (std.mem.eql(u8, candidate.atom.text, expr.list.items[1].atom.text)){
+					return;
+				}
+			}
+			current_block.read.append(expr.list.items[1])
+				catch unreachable;
+		}
+		if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
+			return;
+		}
+		for (current_block.write.items) |candidate| {
+			if (std.mem.eql(u8, candidate.atom.text, expr.atom.text)){
+				return;
+			}
+		}
+		current_block.read.append(expr)
+			catch unreachable;
+	}
+}
+	pub fn self.check_var_write(self: *Program, current_block: *BBlock, expr: *Expr) void {
+		if (expr.* == .list){
+			std.debug.assert(expr.list.items[0].* == .atom);
+			std.debug.assert(expr.list.items[0].atom.tag == .AT);
+			current_block.write.append(expr.list.items[1])
+				catch unreachable;
+		}
+		if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
+			return;
+		}
+		current_block.write_append(expr)
+			catch unreachable;
+	}
+
 	pub fn evaluate(self: *Program, vm_target: Token, repr: ReifableRepr) *Expr {
 		if (debug){
 			std.debug.print("Evaluating\n", .{});
@@ -3050,6 +3252,33 @@ const Program = struct {
 			}
 		}
 		return expr;
+	}
+};
+
+const BBlock = struct {
+	start: u64,
+	end: u64,
+	next: Buffer(*BBlock),
+	prev: Buffer(*BBlock),
+	read_write: Buffer(*Expr),
+	write: Buffer(*Expr),
+	live_in: Buffer(*Expr),
+	live_out: Buffer(*Expr),
+
+	pub fn init(mem: *const std.mem.Allocator, i: u64) *BBlock {
+		const loc = mem.create(BBlock)
+			catch unreachable;
+		loc.* = BBlock{
+			.start = i,
+			.end = i,
+			.next =Buffer(*BBlock).init(mem.*),
+			.prev =Buffer(*BBlock).init(mem.*),
+			.read_write = Buffer(*Expr).init(mem.*),
+			.write = Buffer(*Expr).init(mem.*),
+			.live_in = Buffer(*Expr).init(mem.*),
+			.live_out = Buffer(*Expr).init(mem.*)
+		};
+		return loc;
 	}
 };
 
