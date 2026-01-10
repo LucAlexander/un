@@ -2300,7 +2300,7 @@ const Program = struct {
 						if (!last){
 							if (targets_reg(inst.list.items[1])) |dest| {
 								for (live_after.items[0].items) |live| {
-									if (std.mem.eql(u8, live.atom.text, dest.atom.text)){
+									if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
 										after.append(live)
 											catch unreachable;
 									}
@@ -2323,7 +2323,7 @@ const Program = struct {
 						if (!last){
 							if (targets_reg(inst.list.items[1])) |dest| {
 								for (live_after.items[0].items) |live| {
-									if (std.mem.eql(u8, live.atom.text, dest.atom.text)){
+									if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
 										after.append(live)
 											catch unreachable;
 									}
@@ -2392,7 +2392,7 @@ const Program = struct {
 						if (!last){
 							if (targets_reg(inst.list.items[1])) |dest| {
 								for (live_after.items[0].items) |live| {
-									if (std.mem.eql(u8, live.atom.text, dest.atom.text)){
+									if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
 										after.append(live)
 											catch unreachable;
 									}
