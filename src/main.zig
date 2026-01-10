@@ -2305,6 +2305,11 @@ const Program = struct {
 				.REIF => {
 					self.check_var_write(current_block, expr.list.items[1]);
 				},
+				.INT => {
+					for (expr.list.items[1..expr.list.items.len]) |arg| {
+						self.check_var_read(current_block, arg);
+					}
+				},
 				else => { }
 			}
 			i += 1;
@@ -2431,6 +2436,24 @@ const Program = struct {
 							}
 						}
 					},
+					.INT => {
+						if (live_after.items.len != 0){
+							for (live_after.items[0].items) |live| {
+								after.append(live)
+									catch unreachable;
+							}
+						}
+						else{
+							for (block.live_out.items)|out| {
+								after.append(out)
+									catch unreachable;
+							}
+						}
+						for (inst.list.items[1..inst.list.items.len]) |arg| {
+							after.append(arg)
+								catch unreachable;
+						}
+					},
 					else => {
 						if (live_after.items.len != 0){
 							for (live_after.items[0].items) |live| {
@@ -2514,6 +2537,11 @@ const Program = struct {
 					},
 					.REIF => {
 						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+					},
+					.INT => {
+						for (inst.list.items[1..inst.list.items.len]) |arg| {
+							self.color_read(arg, block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						}
 					},
 					else => { }
 				}
