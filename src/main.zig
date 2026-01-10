@@ -2528,10 +2528,6 @@ const Program = struct {
 					free_list.append(entry.value_ptr.*)
 						catch unreachable;
 				}
-				const clone = deep_copy(self.mem, inst);
-				self.color_expr(clone, &reg_of);
-				new.append(clone)
-					catch unreachable;
 				for (free_list.items) |register| {
 					if (var_of.get(register)) |candidate| {
 						if (stack_offsets.get(candidate.atom.text)) |inner_offset| {
@@ -2549,6 +2545,41 @@ const Program = struct {
 						_ = reg_of.remove(candidate.atom.text);
 					}
 					else{
+						std.debug.assert(false);
+					}
+				}
+				const clone = deep_copy(self.mem, inst);
+				self.color_expr(clone, &reg_of);
+				new.append(clone)
+					catch unreachable;
+				var post_free_list = Buffer(TOKEN).init(self.mem.*);
+				var it2 = reg_of.iterator();
+				outer_post: while (it2.next()) |entry| {
+					const candidate = entry.key_ptr.*;
+					for (after.items) |live| {
+						if (std.mem.eql(u8, live.atom.text, candidate)){
+							continue :outer_post;
+						}
+					}
+					post_free_list.append(entry.value_ptr.*)
+						catch unreachable;
+				}
+				for (post_free_list.items) |reg| {
+					if (var_of.get(reg)) |candidate| {
+						if (stack_offsets.get(candidate.atom.text)) |offset| {
+							self.store_to_stack_offset(reg, offset, &new);
+						}
+						else {
+							stack_offsets.put(candidate.atom.text, stack_position)
+								catch unreachable;
+							self.push_to_stack_offset(reg, &new);
+							stack_position += 8;
+						}
+						free_regs.append(reg)
+							catch unreachable;
+						_ = var_of.remove(reg);
+						_ = reg_of.remove(candidate.atom.text);
+					} else {
 						std.debug.assert(false);
 					}
 				}
