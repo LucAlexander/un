@@ -2235,6 +2235,13 @@ const Program = struct {
 						buffer.append(current_block)
 							catch unreachable;
 					}
+					else {
+						var buf = Buffer(*BBlock).init(self.mem.*);
+						buf.append(current_block)
+							catch unreachable;
+						block_chain.put(expr.list.items[1].atom.text, buf)
+							catch unreachable;
+					}
 					current_block = next_block;
 					block_list.append(current_block)
 						catch unreachable;
@@ -2336,34 +2343,20 @@ const Program = struct {
 			free_regs.append(.REG8) catch unreachable;
 			free_regs.append(.REG9) catch unreachable;
 			free_regs.append(.REG10) catch unreachable;
-			for (block.live_in.items) |in| {
-				if (stack_offsets.get(in.atom.text)) |offset| {
-					if (free_regs.items.len == 0){
-						self.spill(in, &free_regs, block, &stack_offsets, &reg_of, &var_of, &stack_position, &new);
-					}
-					else{
-						const reg = free_regs.orderedRemove(0);
-						reg_of.put(in.atom.text, reg)
-							catch unreachable;
-						var_of.put(reg, in)
-							catch unreachable;
-						self.load_from_stack_offset(reg, offset, &new);
-					}
-				}
-				else if (free_regs.items.len == 0){
-					self.spill(in, &free_regs, block, &stack_offsets, &reg_of, &var_of, &stack_position, &new);
-				}
-				else{
-					const reg = free_regs.orderedRemove(0);
-					reg_of.put(in.atom.text, reg)
-						catch unreachable;
-					var_of.put(reg, in)
-						catch unreachable;
-				}
-			}
 			for (block.start .. block.end) |index| {
 				const inst = normalized.items[index];
 				switch (inst.list.items[0].atom.tag){
+					.REG => {
+						const variable = inst.list.items[1].atom.text;
+						if (reg_of.get(variable)) |_| { }
+						else{
+							var_of.put(.IDEN, inst.list.items[1])
+								catch unreachable;
+							reg_of.put(variable, .IDEN)
+								catch unreachable;
+						}
+						i += 1;
+					},
 					.MOV => {
 						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
 						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
@@ -2392,8 +2385,9 @@ const Program = struct {
 					},
 					else => { }
 				}
-				self.color_expr(inst, reg_of);
-				new.append(inst)
+				const clone = deep_copy(self.mem, inst);
+				self.color_expr(clone, &reg_of);
+				new.append(clone)
 					catch unreachable;
 			}
 			for (block.live_out.items) |out| {
@@ -2413,17 +2407,23 @@ const Program = struct {
 		return new;
 	}
 
-	pub fn color_expr(self: *Program, expr: *Expr, reg_of: Map(TOKEN)) void {
+	pub fn color_expr(self: *Program, expr: *Expr, reg_of: *Map(TOKEN)) void {
 		switch (expr.*){
 			.atom => {
 				if (reg_of.get(expr.atom.text)) |reg| {
 					expr.atom.tag = reg;
 					return;
 				}
+				std.debug.print("no register allocated for {s}\n", .{expr.atom.text});
 				std.debug.assert(false);
 			},
 			.list => {
+				var first = true;
 				for (expr.list.items) |sub| {
+					if (first){
+						first = false;
+						continue;
+					}
 					self.color_expr(sub, reg_of);
 				}
 			}
@@ -2435,15 +2435,33 @@ const Program = struct {
 		if (expr.* == .list){
 			variable = expr.list.items[1];
 		}
-		if (reg_of.get(variable.atom.text)) |_| {
-			return;
+		if (reg_of.get(variable.atom.text)) |definition| {
+			if (definition == .IDEN){
+				if (free_regs.items.len == 0) {
+					self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
+				}
+				else {
+					const reg = free_regs.orderedRemove(0);
+					reg_of.put(variable.atom.text, reg)
+						catch unreachable;
+					var_of.put(reg, variable)
+						catch unreachable;
+				}
+			}
+			else{
+				return;
+			}
 		}
 		if (stack_offsets.get(variable.atom.text)) |offset| {
 			if (free_regs.items.len == 0){
-				self.spill(variable, free_regs, block, stack_offsets, reg_of, var_of, stack_position, new);
+				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
+				if (var_of.get(reg)) |old_var| {
+					_ = reg_of.remove(old_var.atom.text);
+					_ = var_of.remove(reg);
+				}
 				reg_of.put(variable.atom.text, reg)
 					catch unreachable;
 				var_of.put(reg, variable)
@@ -2452,10 +2470,14 @@ const Program = struct {
 			}
 		}
 		else if (free_regs.items.len == 0){
-			self.spill(variable, free_regs, block, stack_offsets, reg_of, var_of, stack_position, new);
+			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
+			if (var_of.get(reg)) |old_var| {
+				_ = reg_of.remove(old_var.atom.text);
+				_ = var_of.remove(reg);
+			}
 			reg_of.put(variable.atom.text, reg)
 				catch unreachable;
 			var_of.put(reg, variable)
@@ -2468,15 +2490,33 @@ const Program = struct {
 		if (expr.* == .list){
 			variable = expr.list.items[1];
 		}
-		if (reg_of.get(variable.atom.text)) |_| {
-			return;
+		if (reg_of.get(variable.atom.text)) |definition| {
+			if (definition == .IDEN){
+				if (free_regs.items.len == 0) {
+					self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
+				}
+				else {
+					const reg = free_regs.orderedRemove(0);
+					reg_of.put(variable.atom.text, reg)
+						catch unreachable;
+					var_of.put(reg, variable)
+						catch unreachable;
+				}
+			}
+			else{
+				return;
+			}
 		}
 		if (stack_offsets.get(variable.atom.text)) |_| {
 			if (free_regs.items.len == 0){
-				self.spill(variable, free_regs, block, stack_offsets, reg_of, var_of, stack_position, new);
+				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
+				if (var_of.get(reg)) |old_var| {
+					_ = reg_of.remove(old_var.atom.text);
+					_ = var_of.remove(reg);
+				}
 				reg_of.put(variable.atom.text, reg)
 					catch unreachable;
 				var_of.put(reg, variable)
@@ -2484,10 +2524,14 @@ const Program = struct {
 			}
 		}
 		else if (free_regs.items.len == 0){
-			self.spill(variable, free_regs, block, stack_offsets, reg_of, var_of, stack_position, new);
+			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
+			if (var_of.get(reg)) |old_var| {
+				_ = reg_of.remove(old_var.atom.text);
+				_ = var_of.remove(reg);
+			}
 			reg_of.put(variable.atom.text, reg)
 				catch unreachable;
 			var_of.put(reg, variable)
@@ -2498,7 +2542,6 @@ const Program = struct {
 	pub fn spill(
 		self: *Program,
 		in: *Expr,
-		free_regs: *Buffer(TOKEN),
 		block: *BBlock,
 		stack_offsets: *Map(u64),
 		reg_of: *Map(TOKEN),
@@ -2507,18 +2550,23 @@ const Program = struct {
 		new: *Buffer(*Expr)
 	) void {
 		var reg: TOKEN = undefined;
-		outer: for (free_regs.items) |candidate| {
-			if (var_of.get(candidate)) |variable| {
-				for (block.live_out.items) |out| {
-					if (out == variable){
-						continue :outer;
-					}
-				}
+		var it = var_of.iterator();
+		var first = true;
+		outer: while (it.next()) |entry| {
+			const candidate = entry.key_ptr.*;
+			if (first){
+				first = false;
 				reg = candidate;
-				break;
 			}
+			const variable = entry.value_ptr.*;
+			for (block.live_out.items) |out| {
+				if (out.atom.tag == variable.atom.tag){
+					continue :outer;
+				}
+			}
+			reg = candidate;
+			break;
 		}
-		std.debug.assert(reg != undefined);
 		if (var_of.get(reg)) |variable| {
 			if (stack_offsets.get(variable.atom.text)) |inner_offset| {
 				self.store_to_stack_offset(reg, inner_offset, new);
@@ -2532,6 +2580,10 @@ const Program = struct {
 		}
 		else{
 			std.debug.assert(false);
+		}
+		if (var_of.get(reg)) |old_var| {
+			_ = reg_of.remove(old_var.atom.text);
+			_ = var_of.remove(reg);
 		}
 		reg_of.put(in.atom.text, reg)
 			catch unreachable;
@@ -2907,6 +2959,7 @@ const Program = struct {
 			}
 			current_block.read_write.append(expr.list.items[1])
 				catch unreachable;
+			return;
 		}
 		if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
 			return;
@@ -2926,6 +2979,7 @@ const Program = struct {
 			std.debug.assert(expr.list.items[0].atom.tag == .AT);
 			current_block.write.append(expr.list.items[1])
 				catch unreachable;
+			return;
 		}
 		if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
 			return;
@@ -3299,6 +3353,37 @@ const Program = struct {
 		return expr;
 	}
 };
+
+pub fn deep_copy(mem: *const std.mem.Allocator, expr: *Expr) *Expr {
+	switch (expr.*) {
+		.atom => {
+			const clone = mem.create(Expr)
+				catch unreachable;
+			clone.* = Expr{
+				.atom = Token{
+					.pos = 0,
+					.tag = expr.atom.tag,
+					.text = expr.atom.text
+				}
+			};
+			return clone;
+		},
+		.list => {
+			
+			const clone = mem.create(Expr)
+				catch unreachable;
+			clone.* = Expr{
+				.list = Buffer(*Expr).init(mem.*)
+			};
+			for (expr.list.items) |sub| {
+				clone.list.append(deep_copy(mem, sub))
+					catch unreachable;
+			}
+			return clone;
+		}
+	}
+	unreachable;
+}
 
 const BBlock = struct {
 	start: u64,
