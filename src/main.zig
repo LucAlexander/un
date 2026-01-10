@@ -2511,9 +2511,9 @@ const Program = struct {
 							self.color_read(arg, block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
 						}
 					},
-					else => { }
+					else => {}
 				}
-				var free_list = Buffer([]const u8).init(self.mem.*);
+				var free_list = Buffer(TOKEN).init(self.mem.*);
 				var it = reg_of.iterator();
 				outer: while (it.next()) |entry| {
 					const candidate = entry.key_ptr.*;
@@ -2525,19 +2525,33 @@ const Program = struct {
 					if (used_in_inst(inst, candidate)) {
 						continue;
 					}
-					free_regs.append(entry.value_ptr.*)
+					free_list.append(entry.value_ptr.*)
 						catch unreachable;
-					_ = var_of.remove(entry.value_ptr.*);
-					free_list.append(candidate)
-						catch unreachable;
-				}
-				for (free_list.items) |candidate| {
-					_ = reg_of.remove(candidate);
 				}
 				const clone = deep_copy(self.mem, inst);
 				self.color_expr(clone, &reg_of);
 				new.append(clone)
 					catch unreachable;
+				for (free_list.items) |register| {
+					if (var_of.get(register)) |candidate| {
+						if (stack_offsets.get(candidate.atom.text)) |inner_offset| {
+							self.store_to_stack_offset(register, inner_offset, &new);
+						}
+						else{
+							stack_offsets.put(candidate.atom.text, stack_position)
+								catch unreachable;
+							self.push_to_stack_offset(register, &new);
+							stack_position += 8;
+						}
+						free_regs.append(register)
+							catch unreachable;
+						_ = var_of.remove(register);
+						_ = reg_of.remove(candidate.atom.text);
+					}
+					else{
+						std.debug.assert(false);
+					}
+				}
 			}
 			for (block.live_out.items) |out| {
 				if (reg_of.get(out.atom.text)) |reg| {
@@ -2604,16 +2618,28 @@ const Program = struct {
 		if (expr.* == .list){
 			variable = expr.list.items[1];
 		}
+		switch (variable.atom.tag){
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+				return;
+			},
+			else => {}
+		}
+		std.debug.print("checking read to variable {s}\n", .{variable.atom.text});
 		if (reg_of.get(variable.atom.text)) |_| {
+			std.debug.print("  already allocated\n", .{});
 			return;
 		}
 		if (stack_offsets.get(variable.atom.text)) |offset| {
+			std.debug.print("  exists at an offset\n", .{});
 			if (free_regs.items.len == 0){
+				std.debug.print("    no free registers, spilling\n", .{});
 				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
+				std.debug.print("    allocating free register {}\n", .{reg});
 				if (var_of.get(reg)) |old_var| {
+					std.debug.print("    purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
 					_ = reg_of.remove(old_var.atom.text);
 					_ = var_of.remove(reg);
 				}
@@ -2625,11 +2651,14 @@ const Program = struct {
 			}
 		}
 		else if (free_regs.items.len == 0){
+			std.debug.print("  no free registers, spilling\n", .{});
 			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
+			std.debug.print("  allocating free register {}\n", .{reg});
 			if (var_of.get(reg)) |old_var| {
+				std.debug.print("  purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
 				_ = reg_of.remove(old_var.atom.text);
 				_ = var_of.remove(reg);
 			}
@@ -2645,16 +2674,28 @@ const Program = struct {
 		if (expr.* == .list){
 			variable = expr.list.items[1];
 		}
+		switch (variable.atom.tag){
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+				return;
+			},
+			else => {}
+		}
+		std.debug.print("checking write to variable {s}\n", .{variable.atom.text});
 		if (reg_of.get(variable.atom.text)) |_| {
+			std.debug.print("  already allocated\n", .{});
 			return;
 		}
 		if (stack_offsets.get(variable.atom.text)) |_| {
+			std.debug.print("  exists at an offset\n", .{});
 			if (free_regs.items.len == 0){
+				std.debug.print("    no free registers, spilling\n", .{});
 				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
+				std.debug.print("    allocating free register {}\n", .{reg});
 				if (var_of.get(reg)) |old_var| {
+					std.debug.print("    purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
 					_ = reg_of.remove(old_var.atom.text);
 					_ = var_of.remove(reg);
 				}
@@ -2665,11 +2706,14 @@ const Program = struct {
 			}
 		}
 		else if (free_regs.items.len == 0){
+			std.debug.print("  no free registers, spilling\n", .{});
 			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
+			std.debug.print("  allocating free register {}\n", .{reg});
 			if (var_of.get(reg)) |old_var| {
+				std.debug.print("  purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
 				_ = reg_of.remove(old_var.atom.text);
 				_ = var_of.remove(reg);
 			}
@@ -2701,7 +2745,7 @@ const Program = struct {
 			}
 			const variable = entry.value_ptr.*;
 			for (block.live_out.items) |out| {
-				if (out.atom.tag == variable.atom.tag){
+				if (std.mem.eql(u8, out.atom.text, variable.atom.text)){
 					continue :outer;
 				}
 			}
@@ -3060,7 +3104,7 @@ const Program = struct {
 		for (current_block.next.items) |next| {
 			outer: for (next.live_in.items) |in| {
 				for (current_block.live_out.items) |out| {
-					if (in == out){
+					if (std.mem.eql(u8, in.atom.text, out.atom.text)){
 						continue :outer;
 					}
 				}
@@ -3075,7 +3119,7 @@ const Program = struct {
 				catch unreachable;
 			outer: for (current_block.live_out.items) |out| {
 				for (current_block.write.items) |def| {
-					if (out == def){
+					if (std.mem.eql(u8, out.atom.text, def.atom.text)){
 						continue :outer;
 					}
 				}
