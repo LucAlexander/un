@@ -1765,26 +1765,6 @@ const Program = struct {
 				},
 				.INT => {
 					std.debug.assert(expr.list.items.len < 5);
-					self.push_register(normalized, i, .REG9);
-					i += 1;
-					self.push_register(normalized, i, .REG8);
-					i += 1;
-					self.push_register(normalized, i, .REG7);
-					i += 1;
-					self.push_register(normalized, i, .REG6);
-					i += 1;
-					self.push_register(normalized, i, .REG5);
-					i += 1;
-					self.push_register(normalized, i, .REG4);
-					i += 1;
-					self.push_register(normalized, i, .REG3);
-					i += 1;
-					self.push_register(normalized, i, .REG2);
-					i += 1;
-					self.push_register(normalized, i, .REG1);
-					i += 1;
-					self.push_register(normalized, i, .REG0);
-					i += 1;
 					switch (expr.list.items.len){
 						2 => {
 							self.move_argument_register(normalized, &i, .REG0, expr.list.items[1]);
@@ -1802,18 +1782,6 @@ const Program = struct {
 							unreachable;
 						}
 					}
-					self.push_register(normalized, i+1, .REG11);
-					self.push_register(normalized, i+1, .REG10);
-					self.pop_register(normalized, i+1, .REG9);
-					self.pop_register(normalized, i+1, .REG8);
-					self.pop_register(normalized, i+1, .REG7);
-					self.pop_register(normalized, i+1, .REG6);
-					self.pop_register(normalized, i+1, .REG5);
-					self.pop_register(normalized, i+1, .REG4);
-					self.pop_register(normalized, i+1, .REG3);
-					self.pop_register(normalized, i+1, .REG2);
-					self.pop_register(normalized, i+1, .REG1);
-					self.pop_register(normalized, i+1, .REG0);
 				},
 				else => {
 					continue;
@@ -1866,16 +1834,13 @@ const Program = struct {
 			std.debug.assert(source.list.items[0].atom.tag == .AT);
 			std.debug.assert(source.list.items[1].* == .atom);
 			if ((source.list.items[1].atom.tag == register) or
-			  (source.list.items[1].atom.tag != .REG0 and
-			  source.list.items[1].atom.tag != .REG1 and
-			  source.list.items[1].atom.tag != .REG2 and
-			  source.list.items[1].atom.tag != .REG3 and
-			  source.list.items[1].atom.tag != .REG4 and
+			  ( source.list.items[1].atom.tag != .REG4 and
 			  source.list.items[1].atom.tag != .REG5 and
 			  source.list.items[1].atom.tag != .REG6 and
 			  source.list.items[1].atom.tag != .REG7 and
 			  source.list.items[1].atom.tag != .REG8 and
-			  source.list.items[1].atom.tag != .REG9)){
+			  source.list.items[1].atom.tag != .REG9 and
+			  source.list.items[1].atom.tag != .REG10)){
 				const loc = self.mem.create(Expr)
 					catch unreachable;
 				loc.* = Expr{
@@ -2310,11 +2275,11 @@ const Program = struct {
 						self.check_var_read(current_block, arg);
 					}
 				},
-				else => { }
+				else => {}
 			}
 			i += 1;
 		}
-		current_block.end = i-1;
+		current_block.end = i;
 		var visited = std.AutoHashMap(*BBlock, bool).init(self.mem.*);
 		while (self.backward_dfs_cfg(current_block, &visited)) {
 			visited.clearRetainingCapacity();
@@ -2325,13 +2290,14 @@ const Program = struct {
 		for (block_list.items) |block| {
 			var live_after = Buffer(Buffer(*Expr)).init(self.mem.*);
 			var back = block.end;
+			var last = true;
 			while (back > block.start){
 				const inst = normalized.items[back-1];
 				back -= 1;
 				var after = Buffer(*Expr).init(self.mem.*);
 				switch (inst.list.items[0].atom.tag){
 					.MOV, .NOT, .COM => {
-						if (live_after.items.len != 0){
+						if (!last){
 							if (targets_reg(inst.list.items[1])) |dest| {
 								for (live_after.items[0].items) |live| {
 									if (std.mem.eql(u8, live.atom.text, dest.atom.text)){
@@ -2342,6 +2308,7 @@ const Program = struct {
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2353,7 +2320,7 @@ const Program = struct {
 						}
 					},
 					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-						if (live_after.items.len != 0){
+						if (!last){
 							if (targets_reg(inst.list.items[1])) |dest| {
 								for (live_after.items[0].items) |live| {
 									if (std.mem.eql(u8, live.atom.text, dest.atom.text)){
@@ -2364,6 +2331,7 @@ const Program = struct {
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2379,13 +2347,14 @@ const Program = struct {
 						}
 					},
 					.CMP => {
-						if (live_after.items.len != 0){
+						if (!last){
 							for (live_after.items[0].items) |live| {
 								after.append(live)
 									catch unreachable;
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2401,13 +2370,14 @@ const Program = struct {
 						}
 					},
 					.PSH => {
-						if (live_after.items.len != 0){
+						if (!last){
 							for (live_after.items[0].items) |live| {
 								after.append(live)
 									catch unreachable;
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2419,7 +2389,7 @@ const Program = struct {
 						}
 					},
 					.POP, .REIF => {
-						if (live_after.items.len != 0){
+						if (!last){
 							if (targets_reg(inst.list.items[1])) |dest| {
 								for (live_after.items[0].items) |live| {
 									if (std.mem.eql(u8, live.atom.text, dest.atom.text)){
@@ -2430,6 +2400,7 @@ const Program = struct {
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2437,13 +2408,14 @@ const Program = struct {
 						}
 					},
 					.INT => {
-						if (live_after.items.len != 0){
+						if (!last){
 							for (live_after.items[0].items) |live| {
 								after.append(live)
 									catch unreachable;
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2455,13 +2427,14 @@ const Program = struct {
 						}
 					},
 					else => {
-						if (live_after.items.len != 0){
+						if (!last){
 							for (live_after.items[0].items) |live| {
 								after.append(live)
 									catch unreachable;
 							}
 						}
 						else{
+							last = false;
 							for (block.live_out.items)|out| {
 								after.append(out)
 									catch unreachable;
@@ -2475,10 +2448,6 @@ const Program = struct {
 			var reg_of = Map(TOKEN).init(self.mem.*);
 			var var_of = std.AutoHashMap(TOKEN, *Expr).init(self.mem.*);
 			var free_regs = Buffer(TOKEN).init(self.mem.*);
-			free_regs.append(.REG0) catch unreachable;
-			free_regs.append(.REG1) catch unreachable;
-			free_regs.append(.REG2) catch unreachable;
-			free_regs.append(.REG3) catch unreachable;
 			free_regs.append(.REG4) catch unreachable;
 			free_regs.append(.REG5) catch unreachable;
 			free_regs.append(.REG6) catch unreachable;
@@ -2486,9 +2455,8 @@ const Program = struct {
 			free_regs.append(.REG8) catch unreachable;
 			free_regs.append(.REG9) catch unreachable;
 			free_regs.append(.REG10) catch unreachable;
-			std.debug.print("{}-{}\n", .{block.end, block.start});
-			std.debug.print(" {} {}\n", .{block.end-block.start, live_after.items.len});
-			for (block.start .. block.end, live_after.items) |index, after| {
+			for (block.start .. block.end) |index| {
+				const after = live_after.items[index-block.start];
 				const inst = normalized.items[index];
 				switch (inst.list.items[0].atom.tag){
 					.REG => {
@@ -2545,10 +2513,7 @@ const Program = struct {
 					},
 					else => { }
 				}
-				const clone = deep_copy(self.mem, inst);
-				self.color_expr(clone, &reg_of);
-				new.append(clone)
-					catch unreachable;
+				var free_list = Buffer([]const u8).init(self.mem.*);
 				var it = reg_of.iterator();
 				outer: while (it.next()) |entry| {
 					const candidate = entry.key_ptr.*;
@@ -2557,11 +2522,22 @@ const Program = struct {
 							continue :outer;
 						}
 					}
+					if (used_in_inst(inst, candidate)) {
+						continue;
+					}
 					free_regs.append(entry.value_ptr.*)
 						catch unreachable;
 					_ = var_of.remove(entry.value_ptr.*);
+					free_list.append(candidate)
+						catch unreachable;
+				}
+				for (free_list.items) |candidate| {
 					_ = reg_of.remove(candidate);
 				}
+				const clone = deep_copy(self.mem, inst);
+				self.color_expr(clone, &reg_of);
+				new.append(clone)
+					catch unreachable;
 			}
 			for (block.live_out.items) |out| {
 				if (reg_of.get(out.atom.text)) |reg| {
@@ -2583,7 +2559,18 @@ const Program = struct {
 	pub fn color_expr(self: *Program, expr: *Expr, reg_of: *Map(TOKEN)) void {
 		switch (expr.*){
 			.atom => {
-				if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
+				switch(expr.atom.tag){
+					.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+						return;
+					},
+					else => {}
+				}
+				if (std.mem.eql(u8, "fp", expr.atom.text)){
+					expr.atom.tag = .FPTR;
+					return;
+				}
+				if (std.mem.eql(u8, "sp", expr.atom.text)){
+					expr.atom.tag = .SPTR;
 					return;
 				}
 				if (reg_of.get(expr.atom.text)) |reg| {
@@ -3115,8 +3102,11 @@ const Program = struct {
 				catch unreachable;
 			return;
 		}
-		if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
-			return;
+		switch(expr.atom.tag){
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+				return;
+			},
+			else => {}
 		}
 		for (current_block.write.items) |candidate| {
 			if (std.mem.eql(u8, candidate.atom.text, expr.atom.text)){
@@ -3135,8 +3125,11 @@ const Program = struct {
 				catch unreachable;
 			return;
 		}
-		if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
-			return;
+		switch(expr.atom.tag){
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+				return;
+			},
+			else => {}
 		}
 		current_block.write.append(expr)
 			catch unreachable;
@@ -3508,15 +3501,41 @@ const Program = struct {
 	}
 };
 
+pub fn used_in_inst(inst: *Expr, candidate: []const u8) bool {
+	switch (inst.*){
+		.atom => {
+			if (std.mem.eql(u8, candidate, inst.atom.text)){
+				return true;
+			}
+			return false;
+		},
+		.list => {
+			for (inst.list.items) |sub| {
+				if (used_in_inst(sub, candidate)){
+					return true;
+				}
+			}
+			return false;
+		}
+	}
+	unreachable;
+}
+
 pub fn targets_reg(expr: *Expr) ?*Expr {
 	if (expr.* == .list){
-		if (expr.list.items[1].atom.tag == .NUM or expr.list.items[1].atom.tag == .STR){
-			return null;
+		switch(expr.list.items[1].atom.tag){
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+				return null;
+			},
+			else => {}
 		}
 		return expr.list.items[1];
 	}
-	if (expr.atom.tag == .NUM or expr.atom.tag == .STR){
-		return null;
+	switch(expr.atom.tag){
+		.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+			return null;
+		},
+		else => {}
 	}
 	return expr;
 }
