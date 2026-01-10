@@ -2,7 +2,7 @@ const std = @import("std");
 const Buffer = std.ArrayList;
 
 const debug = false;
-const debugger = false;
+const debugger = true;
 
 pub const Config = struct {
 	screen_width: u64,
@@ -235,7 +235,7 @@ pub const VM = struct {
 				};
 				const stdout = std.io.getStdOut().writer();
 				stdout.print("\x1b[2J\x1b[H", .{}) catch unreachable;
-				for (0..16) |i| {
+				for (0..32) |i| {
 					stdout.print("                                                                                       ", .{}) catch unreachable;
 					stdout.print("{x:04} : ", .{(i*8)}) catch unreachable;
 					for (0 .. 8) |k| {
@@ -244,7 +244,7 @@ pub const VM = struct {
 					std.debug.print("\n", .{});
 				}
 				const bottom = core_ptr.reg[rsp]-8;
-				var top = bottom + 8*16;
+				var top = bottom + 8*32;
 				if (top >= vm.memory.mem.len){
 					top = vm.memory.mem.len-1;
 				}
@@ -271,7 +271,7 @@ pub const VM = struct {
 				if (ip_addr > 4){
 					begin = ip_addr - 4*4;
 				}
-				const end = begin + 4*16;
+				const end = begin + 4*32;
 				while (begin < end){
 					stdout.print("                            ", .{}) catch unreachable;
 					var isip = false;
