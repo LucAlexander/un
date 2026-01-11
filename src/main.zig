@@ -2579,7 +2579,8 @@ const Program = struct {
 							catch unreachable;
 						_ = var_of.remove(reg);
 						_ = reg_of.remove(candidate.atom.text);
-					} else {
+					}
+					else {
 						std.debug.assert(false);
 					}
 				}
@@ -3168,8 +3169,19 @@ const Program = struct {
 		if (expr.* == .list){
 			std.debug.assert(expr.list.items[0].* == .atom);
 			std.debug.assert(expr.list.items[0].atom.tag == .AT);
+			switch(expr.list.items[1].atom.tag){
+				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+					return;
+				},
+				else => {}
+			}
 			for (current_block.write.items) |candidate| {
 				if (std.mem.eql(u8, candidate.atom.text, expr.list.items[1].atom.text)){
+					return;
+				}
+			}
+			for (current_block.read_write.items) |exists| {
+				if (std.mem.eql(u8, exists.atom.text, expr.list.items[1].atom.text)){
 					return;
 				}
 			}
@@ -3188,6 +3200,11 @@ const Program = struct {
 				return;
 			}
 		}
+		for (current_block.read_write.items) |exists| {
+			if (std.mem.eql(u8, exists.atom.text, expr.atom.text)){
+				return;
+			}
+		}
 		current_block.read_write.append(expr)
 			catch unreachable;
 	}
@@ -3196,6 +3213,17 @@ const Program = struct {
 		if (expr.* == .list){
 			std.debug.assert(expr.list.items[0].* == .atom);
 			std.debug.assert(expr.list.items[0].atom.tag == .AT);
+			switch(expr.list.items[1].atom.tag){
+				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
+					return;
+				},
+				else => {}
+			}
+			for (current_block.write.items) |exists| {
+				if (std.mem.eql(u8, exists.atom.text, expr.list.items[1].atom.text)){
+					return;
+				}
+			}
 			current_block.write.append(expr.list.items[1])
 				catch unreachable;
 			return;
@@ -3205,6 +3233,11 @@ const Program = struct {
 				return;
 			},
 			else => {}
+		}
+		for (current_block.write.items) |exists| {
+			if (std.mem.eql(u8, exists.atom.text, expr.atom.text)){
+				return;
+			}
 		}
 		current_block.write.append(expr)
 			catch unreachable;
