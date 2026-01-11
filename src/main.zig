@@ -2290,28 +2290,20 @@ const Program = struct {
 		for (block_list.items) |block| {
 			var live_after = Buffer(Buffer(*Expr)).init(self.mem.*);
 			var back = block.end;
-			var last = true;
+			live_after.append(block.live_out)
+				catch unreachable;
 			while (back > block.start){
 				const inst = normalized.items[back-1];
 				back -= 1;
 				var after = Buffer(*Expr).init(self.mem.*);
 				switch (inst.list.items[0].atom.tag){
 					.MOV, .NOT, .COM => {
-						if (!last){
-							if (targets_reg(inst.list.items[1])) |dest| {
-								for (live_after.items[0].items) |live| {
-									if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
-										after.append(live)
-											catch unreachable;
-									}
+						if (targets_reg(inst.list.items[1])) |dest| {
+							for (live_after.items[0].items) |live| {
+								if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
+									after.append(live)
+										catch unreachable;
 								}
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
 							}
 						}
 						if (targets_reg(inst.list.items[2])) |src| {
@@ -2320,21 +2312,12 @@ const Program = struct {
 						}
 					},
 					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-						if (!last){
-							if (targets_reg(inst.list.items[1])) |dest| {
-								for (live_after.items[0].items) |live| {
-									if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
-										after.append(live)
-											catch unreachable;
-									}
+						if (targets_reg(inst.list.items[1])) |dest| {
+							for (live_after.items[0].items) |live| {
+								if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
+									after.append(live)
+										catch unreachable;
 								}
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
 							}
 						}
 						if (targets_reg(inst.list.items[2])) |src| {
@@ -2347,18 +2330,9 @@ const Program = struct {
 						}
 					},
 					.CMP => {
-						if (!last){
-							for (live_after.items[0].items) |live| {
-								after.append(live)
-									catch unreachable;
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
-							}
+						for (live_after.items[0].items) |live| {
+							after.append(live)
+								catch unreachable;
 						}
 						if (targets_reg(inst.list.items[1])) |src| {
 							after.append(src)
@@ -2370,18 +2344,9 @@ const Program = struct {
 						}
 					},
 					.PSH => {
-						if (!last){
-							for (live_after.items[0].items) |live| {
-								after.append(live)
-									catch unreachable;
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
-							}
+						for (live_after.items[0].items) |live| {
+							after.append(live)
+								catch unreachable;
 						}
 						if (targets_reg(inst.list.items[1])) |src| {
 							after.append(src)
@@ -2389,37 +2354,19 @@ const Program = struct {
 						}
 					},
 					.POP, .REIF => {
-						if (!last){
-							if (targets_reg(inst.list.items[1])) |dest| {
-								for (live_after.items[0].items) |live| {
-									if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
-										after.append(live)
-											catch unreachable;
-									}
+						if (targets_reg(inst.list.items[1])) |dest| {
+							for (live_after.items[0].items) |live| {
+								if (!std.mem.eql(u8, live.atom.text, dest.atom.text)){
+									after.append(live)
+										catch unreachable;
 								}
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
 							}
 						}
 					},
 					.INT => {
-						if (!last){
-							for (live_after.items[0].items) |live| {
-								after.append(live)
-									catch unreachable;
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
-							}
+						for (live_after.items[0].items) |live| {
+							after.append(live)
+								catch unreachable;
 						}
 						for (inst.list.items[1..inst.list.items.len]) |arg| {
 							after.append(arg)
@@ -2427,24 +2374,16 @@ const Program = struct {
 						}
 					},
 					else => {
-						if (!last){
-							for (live_after.items[0].items) |live| {
-								after.append(live)
-									catch unreachable;
-							}
-						}
-						else{
-							last = false;
-							for (block.live_out.items)|out| {
-								after.append(out)
-									catch unreachable;
-							}
+						for (live_after.items[0].items) |live| {
+							after.append(live)
+								catch unreachable;
 						}
 					}
 				}
 				live_after.insert(0, after)
 					catch unreachable;
 			}
+			block.live_after = live_after;
 			var reg_of = Map(TOKEN).init(self.mem.*);
 			var var_of = std.AutoHashMap(TOKEN, *Expr).init(self.mem.*);
 			var free_regs = Buffer(TOKEN).init(self.mem.*);
@@ -2456,7 +2395,8 @@ const Program = struct {
 			free_regs.append(.REG9) catch unreachable;
 			free_regs.append(.REG10) catch unreachable;
 			for (block.start .. block.end) |index| {
-				const after = live_after.items[index-block.start];
+				const after_index = 1+(index-block.start);
+				const after = live_after.items[after_index];
 				const inst = normalized.items[index];
 				switch (inst.list.items[0].atom.tag){
 					.REG => {
@@ -2464,7 +2404,7 @@ const Program = struct {
 						if (reg_of.get(variable)) |_| { }
 						else{
 							if (free_regs.items.len == 0){
-								self.spill(inst.list.items[1], block, &stack_offsets, &reg_of, &var_of, &stack_position, &new);
+								self.spill(inst.list.items[1], block, &stack_offsets, &reg_of, &var_of, &stack_position, &new, after_index);
 							}
 							else{
 								const reg = free_regs.orderedRemove(0);
@@ -2481,34 +2421,34 @@ const Program = struct {
 						i += 1;
 					},
 					.MOV => {
-						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
-						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
+						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
-						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
-						self.color_read(inst.list.items[3], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
+						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
+						self.color_read(inst.list.items[3], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.NOT, .COM => {
-						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
-						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
+						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.CMP => {
-						self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
-						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
+						self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.PSH => {
-						self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.POP => {
-						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.REIF => {
-						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+						self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 					},
 					.INT => {
 						for (inst.list.items[1..inst.list.items.len]) |arg| {
-							self.color_read(arg, block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new);
+							self.color_read(arg, block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, after_index);
 						}
 					},
 					else => {}
@@ -2645,7 +2585,7 @@ const Program = struct {
 		}
 	}
 
-	pub fn color_read(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr)) void {
+	pub fn color_read(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), after_index: u64) void {
 		var variable = expr;
 		if (expr.* == .list){
 			variable = expr.list.items[1];
@@ -2665,7 +2605,7 @@ const Program = struct {
 			std.debug.print("  exists at an offset\n", .{});
 			if (free_regs.items.len == 0){
 				std.debug.print("    no free registers, spilling\n", .{});
-				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
+				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, after_index);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
@@ -2684,7 +2624,7 @@ const Program = struct {
 		}
 		else if (free_regs.items.len == 0){
 			std.debug.print("  no free registers, spilling\n", .{});
-			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
+			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, after_index);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
@@ -2701,7 +2641,7 @@ const Program = struct {
 		}
 	}
 
-	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr)) void {
+	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), after_index: u64) void {
 		var variable = expr;
 		if (expr.* == .list){
 			variable = expr.list.items[1];
@@ -2721,7 +2661,7 @@ const Program = struct {
 			std.debug.print("  exists at an offset\n", .{});
 			if (free_regs.items.len == 0){
 				std.debug.print("    no free registers, spilling\n", .{});
-				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
+				self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, after_index);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
@@ -2739,7 +2679,7 @@ const Program = struct {
 		}
 		else if (free_regs.items.len == 0){
 			std.debug.print("  no free registers, spilling\n", .{});
-			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new);
+			self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, after_index);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
@@ -2764,7 +2704,8 @@ const Program = struct {
 		reg_of: *Map(TOKEN),
 		var_of: *std.AutoHashMap(TOKEN, *Expr),
 		stack_position: *u64,
-		new: *Buffer(*Expr)
+		new: *Buffer(*Expr),
+		after_index: u64
 	) void {
 		var reg: TOKEN = undefined;
 		var it = var_of.iterator();
@@ -2776,7 +2717,7 @@ const Program = struct {
 				reg = candidate;
 			}
 			const variable = entry.value_ptr.*;
-			for (block.live_out.items) |out| {
+			for (block.live_after.?.items[after_index].items) |out| {
 				if (std.mem.eql(u8, out.atom.text, variable.atom.text)){
 					continue :outer;
 				}
@@ -3688,6 +3629,7 @@ const BBlock = struct {
 	write: Buffer(*Expr),
 	live_in: Buffer(*Expr),
 	live_out: Buffer(*Expr),
+	live_after: ?Buffer(Buffer(*Expr)),
 
 	pub fn init(mem: *const std.mem.Allocator, i: u64) *BBlock {
 		const loc = mem.create(BBlock)
@@ -3700,7 +3642,8 @@ const BBlock = struct {
 			.read_write = Buffer(*Expr).init(mem.*),
 			.write = Buffer(*Expr).init(mem.*),
 			.live_in = Buffer(*Expr).init(mem.*),
-			.live_out = Buffer(*Expr).init(mem.*)
+			.live_out = Buffer(*Expr).init(mem.*),
+			.live_after = null
 		};
 		return loc;
 	}
