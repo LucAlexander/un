@@ -2508,6 +2508,13 @@ const Program = struct {
 							self.push_to_stack_offset(candidate, register, &new, &match);
 							stack_position += 8;
 						}
+						if (block.live_after) |live_after_block| {
+							for (live_after_block.items[after_index].items) |specimen| {
+								if (std.mem.eql(u8, specimen.atom.text, candidate.atom.text)){
+									return self.restart_color(&match, normalized, index);
+								}
+							}
+						}
 						free_regs.append(register)
 							catch unreachable;
 						_ = var_of.remove(register);
@@ -2546,6 +2553,13 @@ const Program = struct {
 							self.push_to_stack_offset(candidate, reg, &new, &match);
 							stack_position += 8;
 						}
+						if (block.live_after) |live_after_block| {
+							for (live_after_block.items[after_index].items) |specimen| {
+								if (std.mem.eql(u8, specimen.atom.text, candidate.atom.text)){
+									return self.restart_color(&match, normalized, index);
+								}
+							}
+						}
 						free_regs.append(reg)
 							catch unreachable;
 						_ = var_of.remove(reg);
@@ -2567,6 +2581,7 @@ const Program = struct {
 						self.push_to_stack_offset(out, reg, &new, &match);
 						stack_position += 8;
 					}
+					return self.restart_color(&match, normalized, block.end);
 				}
 			}
 		}
@@ -2623,14 +2638,14 @@ const Program = struct {
 		}
 		switch (variable.atom.tag){
 			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
-				return;
+				return null;
 			},
 			else => {}
 		}
 		std.debug.print("checking read to variable {s}\n", .{variable.atom.text});
 		if (reg_of.get(variable.atom.text)) |_| {
 			std.debug.print("  already allocated\n", .{});
-			return;
+			return null;
 		}
 		if (stack_offsets.get(variable.atom.text)) |offset| {
 			std.debug.print("  exists at an offset\n", .{});
@@ -2653,6 +2668,7 @@ const Program = struct {
 				var_of.put(reg, variable)
 					catch unreachable;
 				self.load_from_stack_offset(variable, reg, offset, new, match);
+				return self.restart_color(match, normalized, index);
 			}
 		}
 		else if (free_regs.items.len == 0){
@@ -2674,6 +2690,7 @@ const Program = struct {
 			var_of.put(reg, variable)
 				catch unreachable;
 		}
+		return null;
 	}
 
 	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), normalized: *Buffer(*Expr), after_index: u64, index: u64) ?Buffer(*Expr) {
@@ -2683,14 +2700,14 @@ const Program = struct {
 		}
 		switch (variable.atom.tag){
 			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
-				return;
+				return null;
 			},
 			else => {}
 		}
 		std.debug.print("checking write to variable {s}\n", .{variable.atom.text});
 		if (reg_of.get(variable.atom.text)) |_| {
 			std.debug.print("  already allocated\n", .{});
-			return;
+			return null;
 		}
 		if (stack_offsets.get(variable.atom.text)) |_| {
 			std.debug.print("  exists at an offset\n", .{});
@@ -2733,15 +2750,16 @@ const Program = struct {
 			var_of.put(reg, variable)
 				catch unreachable;
 		}
+		return null;
 	}
 
-	pub fn restart_color(match: *Buffer(*Expr), normalized: *Buffer(*Expr), index: u64) Buffer(*Expr) {
+	pub fn restart_color(self: *Program, match: *Buffer(*Expr), normalized: *Buffer(*Expr), index: u64) Buffer(*Expr) {
 		for (index .. normalized.items.len) |i| {
 			const inst = normalized.items[i];
 			match.append(inst)
 				catch unreachable;
 		}
-		return color_cfg(match);
+		return self.color_cfg(match);
 	}
 
 	pub fn spill(
@@ -2786,6 +2804,13 @@ const Program = struct {
 				self.push_to_stack_offset(variable, reg, new, match);
 				stack_position.* += 8;
 			}
+			if (block.live_after) |live_after| {
+				for (live_after.items[after_index].items) |specimen| {
+					if (std.mem.eql(u8, specimen.atom.text, variable.atom.text)){
+						return self.restart_color(match, normalized, index);
+					}
+				}
+			}
 		}
 		else{
 			std.debug.assert(false);
@@ -2798,6 +2823,7 @@ const Program = struct {
 			catch unreachable;
 		var_of.put(reg, in)
 			catch unreachable;
+		return null;
 	}
 
 	pub fn push_to_stack_offset(self: *Program, variable: *Expr, reg: TOKEN, new: *Buffer(*Expr), match: *Buffer(*Expr)) void {
