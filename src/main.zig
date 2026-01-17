@@ -2290,6 +2290,7 @@ const Program = struct {
 		var match = Buffer(*Expr).init(self.mem.*);
 		var stack_offsets = Map(u64).init(self.mem.*);
 		var stack_position: u64 = 0; //TODO we'll try just making it global for now, we should run through in chronological order? I still dont know how im realistically suposed to track runtime stack values without storing them in another specially handled register
+		var restart = false;
 		for (block_list.items) |block| {
 			var live_after = Buffer(Buffer(*Expr)).init(self.mem.*);
 			var back = block.end;
@@ -2407,9 +2408,7 @@ const Program = struct {
 						if (reg_of.get(variable)) |_| { }
 						else{
 							if (free_regs.items.len == 0){
-								if (self.spill(inst.list.items[1], block, &stack_offsets, &reg_of, &var_of, &stack_position, &new, &match, normalized, after_index, index, record)) |inner| {
-									return inner;
-								}
+								restart = restart and self.spill(inst.list.items[1], block, &stack_offsets, &reg_of, &var_of, &stack_position, &new, &match, after_index, index, record);
 							}
 							else{
 								const reg = free_regs.orderedRemove(0);
@@ -2426,60 +2425,34 @@ const Program = struct {
 						i += 1;
 					},
 					.MOV => {
-						if (self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
-						if (self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
+						restart = restart or self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-						if (self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
-						if (self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
-						if (self.color_read(inst.list.items[3], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
+						restart = restart or self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
+						restart = restart or self.color_read(inst.list.items[3], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.NOT, .COM => {
-						if (self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
-						if (self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
+						restart = restart or self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.CMP => {
-						if (self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
-						if (self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
+						restart = restart or self.color_read(inst.list.items[2], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.PSH => {
-						if (self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_read(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.POP => {
-						if (self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.REIF => {
-						if (self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-							return inner;
-						}
+						restart = restart or self.color_write(inst.list.items[1], block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 					},
 					.INT => {
 						for (inst.list.items[1..inst.list.items.len]) |arg| {
-							if (self.color_read(arg, block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, normalized, after_index, index, record)) |inner| {
-								return inner;
-							}
+							restart = restart or self.color_read(arg, block, &reg_of, &var_of, &free_regs, &stack_position, &stack_offsets, &new, &match, after_index, index, record);
 						}
 					},
 					else => {}
@@ -2522,9 +2495,10 @@ const Program = struct {
 									}
 									record.append(SpillRecord{
 										.block = block,
-										.variable = candidate 
+										.variable = candidate,
+										.index = index
 									}) catch unreachable;
-									return self.restart_color(&match, normalized, record, index);
+									restart = true;
 								}
 							}
 						}
@@ -2578,9 +2552,10 @@ const Program = struct {
 									}
 									record.append(SpillRecord{
 										.block = block,
-										.variable = candidate
+										.variable = candidate,
+										.index = index
 									}) catch unreachable;
-									return self.restart_color(&match, normalized, record, index);
+									restart = true;
 								}
 							}
 						}
@@ -2614,9 +2589,10 @@ const Program = struct {
 					}
 					record.append(SpillRecord{
 						.block = block,
-						.variable = out
+						.variable = out,
+						.index = block.end
 					}) catch unreachable;
-					return self.restart_color(&match, normalized, record, block.end);
+					restart = true;
 				}
 			}
 		}
@@ -2666,29 +2642,28 @@ const Program = struct {
 		}
 	}
 
-	pub fn color_read(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), normalized: *Buffer(*Expr), after_index: u64, index: u64, record: *Buffer(SpillRecord)) ?Buffer(*Expr) {
+	pub fn color_read(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), after_index: u64, index: u64, record: *Buffer(SpillRecord)) bool {
 		var variable = expr;
 		if (expr.* == .list){
 			variable = expr.list.items[1];
 		}
 		switch (variable.atom.tag){
 			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
-				return null;
+				return false;
 			},
 			else => {}
 		}
 		std.debug.print("checking read to variable {s}\n", .{variable.atom.text});
 		if (reg_of.get(variable.atom.text)) |_| {
 			std.debug.print("  already allocated\n", .{});
-			return null;
+			return false;
 		}
+		var restart = false;
 		if (stack_offsets.get(variable.atom.text)) |offset| {
 			std.debug.print("  exists at an offset\n", .{});
 			if (free_regs.items.len == 0){
 				std.debug.print("    no free registers, spilling\n", .{});
-				if (self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, normalized, after_index, index, record)) |inner| {
-					return inner;
-				}
+				restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
@@ -2706,22 +2681,21 @@ const Program = struct {
 				for (record.items) |spill_record| {
 					if (spill_record.block == block){
 						if (std.mem.eql(u8, spill_record.variable.atom.text, variable.atom.text)){
-							return null;
+							return false;
 						}
 					}
 				}
 				record.append(SpillRecord{
 					.block = block,
-					.variable = variable 
+					.variable = variable,
+					.index = block.start + after_index
 				}) catch unreachable;
-				return self.restart_color(match, normalized, record, index);
+				return true;
 			}
 		}
 		else if (free_regs.items.len == 0){
 			std.debug.print("  no free registers, spilling\n", .{});
-			if (self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, normalized, after_index, index, record)) |inner| {
-				return inner;
-			}
+			restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
@@ -2736,32 +2710,31 @@ const Program = struct {
 			var_of.put(reg, variable)
 				catch unreachable;
 		}
-		return null;
+		return restart;
 	}
 
-	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), normalized: *Buffer(*Expr), after_index: u64, index: u64, record: *Buffer(SpillRecord)) ?Buffer(*Expr) {
+	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), after_index: u64, index: u64, record: *Buffer(SpillRecord)) bool {
 		var variable = expr;
 		if (expr.* == .list){
 			variable = expr.list.items[1];
 		}
 		switch (variable.atom.tag){
 			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .FPTR, .SPTR => {
-				return null;
+				return false;
 			},
 			else => {}
 		}
 		std.debug.print("checking write to variable {s}\n", .{variable.atom.text});
 		if (reg_of.get(variable.atom.text)) |_| {
 			std.debug.print("  already allocated\n", .{});
-			return null;
+			return false;
 		}
+		var restart = false;
 		if (stack_offsets.get(variable.atom.text)) |_| {
 			std.debug.print("  exists at an offset\n", .{});
 			if (free_regs.items.len == 0){
 				std.debug.print("    no free registers, spilling\n", .{});
-				if (self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, normalized, after_index, index, record)) |inner| {
-					return inner;
-				}
+				restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
 			}
 			else{
 				const reg = free_regs.orderedRemove(0);
@@ -2779,9 +2752,7 @@ const Program = struct {
 		}
 		else if (free_regs.items.len == 0){
 			std.debug.print("  no free registers, spilling\n", .{});
-			if (self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, normalized, after_index, index, record)) |inner| {
-				return inner;
-			}
+			restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
 		}
 		else{
 			const reg = free_regs.orderedRemove(0);
@@ -2796,7 +2767,7 @@ const Program = struct {
 			var_of.put(reg, variable)
 				catch unreachable;
 		}
-		return null;
+		return restart;
 	}
 
 	pub fn restart_color(self: *Program, match: *Buffer(*Expr), normalized: *Buffer(*Expr), record: *Buffer(SpillRecord), index: u64) Buffer(*Expr) {
@@ -2818,11 +2789,10 @@ const Program = struct {
 		stack_position: *u64,
 		new: *Buffer(*Expr),
 		match: *Buffer(*Expr),
-		normalized: *Buffer(*Expr),
 		after_index: u64,
 		index: u64,
 		record: *Buffer(SpillRecord)
-	) ?Buffer(*Expr) {
+	) bool {
 		var reg: TOKEN = undefined;
 		var it = var_of.iterator();
 		var first = true;
@@ -2863,9 +2833,10 @@ const Program = struct {
 						}
 						record.append(SpillRecord{
 							.block = block,
-							.variable = variable
+							.variable = variable,
+							.index = index
 						}) catch unreachable;
-						return self.restart_color(match, normalized, record, index);
+						return true;
 					}
 				}
 			}
@@ -2881,7 +2852,7 @@ const Program = struct {
 			catch unreachable;
 		var_of.put(reg, in)
 			catch unreachable;
-		return null;
+		return false;
 	}
 
 	pub fn push_to_stack_offset(self: *Program, variable: *Expr, reg: TOKEN, new: *Buffer(*Expr), match: *Buffer(*Expr)) void {
@@ -4094,6 +4065,7 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 
 const SpillRecord = struct {
 	block: *BBlock,
-	variable: *Expr
+	variable: *Expr,
+	index: u64
 };
 
