@@ -2309,10 +2309,7 @@ const Program = struct {
 			i += 1;
 		}
 		current_block.end = i;
-		var visited = std.AutoHashMap(*BBlock, bool).init(self.mem.*);
-		while (self.backward_dfs_cfg(current_block, &visited)) {
-			visited.clearRetainingCapacity();
-		}
+		self.backward_cfg(&block_list);
 		var loop = false;
 		var active_loops = std.AutoHashMap(*BBlock, bool).init(self.mem.*);
 		var allocation_boundry:u64 = 0;
@@ -2327,17 +2324,15 @@ const Program = struct {
 		free_regs.append(.REG6) catch unreachable;
 		free_regs.append(.REG7) catch unreachable;
 		var new = Buffer(*Expr).init(self.mem.*);
+		var visited = std.AutoHashMap(*BBlock, bool).init(self.mem.*);
 		for (block_list.items) |block| {
 			var local_loop = false;
-			if (block.prev.items.len > 1){
-				for (block.prev.items) |prev| {
-					if (prev.start > block.end){
-						loop = true;
-						local_loop = true;
-						active_loops.put(prev, true)
-							catch unreachable;
-					}
-				}
+			visited.clearRetainingCapacity();
+			if (dfs_loop_check(block, &visited)) |prev| {
+				loop = true;
+				local_loop = true;
+				active_loops.put(prev, true)
+					catch unreachable;
 			}
 			for (block.start .. block.end) |index| {
 				const inst = normalized.items[index];
@@ -2431,9 +2426,12 @@ const Program = struct {
 					if (std.mem.eql(u8, exp.atom.text, candidate)){
 						continue :outer;
 					}
-					free_list.append(entry.value_ptr.*)
-						catch unreachable;
 				}
+				if (debug){
+					std.debug.print("freeing {s} <-> {}\n", .{candidate, entry.value_ptr.*});
+				}
+				free_list.append(entry.value_ptr.*)
+					catch unreachable;
 			}
 			for (free_list.items) |target| {
 				if (var_of.get(target)) |variable| {
@@ -2448,43 +2446,60 @@ const Program = struct {
 		return new;
 	}
 
-	pub fn backward_dfs_cfg(self: *Program, current_block: *BBlock, visited: *std.AutoHashMap(*BBlock, bool)) bool {
-		if (visited.get(current_block)) |_| {
-			return false;
-		}
-		var changes = false;
-		visited.put(current_block, true)
-			catch unreachable;
-		for (current_block.next.items) |next| {
-			outer: for (next.live_in.items) |in| {
-				for (current_block.live_out.items) |out| {
-					if (std.mem.eql(u8, in.atom.text, out.atom.text)){
-						continue :outer;
-					}
-				}
-				current_block.live_out.append(in)
-					catch unreachable;
-				changes = true;
-			}
-		}
-		if (changes){
-			current_block.live_in.clearRetainingCapacity();
-			current_block.live_in.appendSlice(current_block.read_write.items)
+	pub fn backward_cfg(self: *Program, blocks: *Buffer(*BBlock)) void {
+		var worklist = std.ArrayList(*BBlock).init(self.mem.*);
+		defer worklist.deinit();
+		for (blocks.items) |b| {
+			b.live_in.clearRetainingCapacity();
+			b.live_out.clearRetainingCapacity();
+			worklist.append(b)
 				catch unreachable;
-			outer: for (current_block.live_out.items) |out| {
-				for (current_block.write.items) |def| {
-					if (std.mem.eql(u8, out.atom.text, def.atom.text)){
-						continue :outer;
+		}
+		while (worklist.items.len > 0) {
+			if (worklist.pop()) |b|{
+				const old_in_len  = b.live_in.items.len;
+				const old_out_len = b.live_out.items.len;
+				b.live_out.clearRetainingCapacity();
+				b.live_in.clearRetainingCapacity();
+				for (b.next.items) |next| {
+					outer: for (next.live_in.items) |in| {
+						for (b.live_out.items) |out| {
+							if (std.mem.eql(u8, in.atom.text, out.atom.text)){
+								continue :outer;
+							}
+						}
+						b.live_out.append(in)
+							catch unreachable;
 					}
 				}
-				current_block.live_in.append(out)
+				b.live_in.appendSlice(b.write.items)
 					catch unreachable;
+				outer: for (b.read_write.items) |rw| {
+					for (b.live_in.items) |in| {
+						if (std.mem.eql(u8, in.atom.text, rw.atom.text)){
+							continue :outer;
+						}
+					}
+					b.live_in.append(rw)
+						catch unreachable;
+				}
+				outer: for (b.live_out.items) |out| {
+					for (b.live_in.items) |in| {
+						if (std.mem.eql(u8, in.atom.text, out.atom.text)){
+							continue :outer;
+						}
+					}
+					b.live_in.append(out)
+						catch unreachable;
+				}
+				if (b.live_in.items.len != old_in_len or b.live_out.items.len != old_out_len){
+					for (b.prev.items) |pred| {
+						worklist.append(pred)
+							catch unreachable;
+					}
+				}
 			}
 		}
-		for (current_block.prev.items) |prev| {
-			changes = changes or self.backward_dfs_cfg(prev, visited);
-		}
-		return changes;
 	}
 
 	pub fn check_var_read(_: *Program, current_block: *BBlock, expr: *Expr) void {
@@ -2530,6 +2545,7 @@ const Program = struct {
 		current_block.read_write.append(expr)
 			catch unreachable;
 	}
+
 
 	pub fn check_var_write(_: *Program, current_block: *BBlock, expr: *Expr) void {
 		if (expr.* == .list){
@@ -3217,6 +3233,20 @@ const Program = struct {
 		return expr;
 	}
 };
+
+pub fn dfs_loop_check(block: *BBlock, visited: *std.AutoHashMap(*BBlock, bool)) ?*BBlock {
+	if (visited.get(block)) |_| {
+		return block;
+	}
+	visited.put(block, true)
+		catch unreachable;
+	for (block.prev.items) |in| {
+		if (dfs_loop_check(in, visited)) |prev| {
+			return prev;
+		}
+	}
+	return null;
+}
 
 pub fn used_in_inst(inst: *Expr, candidate: []const u8) bool {
 	switch (inst.*){
