@@ -2167,6 +2167,10 @@ const Program = struct {
 		while (i < normalized.items.len){
 			const expr = normalized.items[i];
 			switch (expr.list.items[0].atom.tag){
+				.REG => {
+					current_block.declared.append(expr.list.items[1])
+						catch unreachable;
+				},
 				.LABEL => {
 					if (current_block.start != i){
 						current_block.end = i-1;
@@ -2472,11 +2476,28 @@ const Program = struct {
 							catch unreachable;
 					}
 				}
-				b.live_in.appendSlice(b.write.items)
-					catch unreachable;
+				outer: for (b.write.items) |w| {
+					for (b.live_in.items) |in| {
+						if (std.mem.eql(u8, in.atom.text, w.atom.text)){
+							continue :outer;
+						}
+					}
+					for (b.declared.items) |decl| {
+						if (std.mem.eql(u8, w.atom.text, decl.atom.text)){
+							continue :outer;
+						}
+					}
+					b.live_in.append(w)
+						catch unreachable;
+				}
 				outer: for (b.read_write.items) |rw| {
 					for (b.live_in.items) |in| {
 						if (std.mem.eql(u8, in.atom.text, rw.atom.text)){
+							continue :outer;
+						}
+					}
+					for (b.declared.items) |decl| {
+						if (std.mem.eql(u8, rw.atom.text, decl.atom.text)){
 							continue :outer;
 						}
 					}
@@ -2486,6 +2507,11 @@ const Program = struct {
 				outer: for (b.live_out.items) |out| {
 					for (b.live_in.items) |in| {
 						if (std.mem.eql(u8, in.atom.text, out.atom.text)){
+							continue :outer;
+						}
+					}
+					for (b.declared.items) |decl| {
+						if (std.mem.eql(u8, out.atom.text, decl.atom.text)){
 							continue :outer;
 						}
 					}
@@ -3323,6 +3349,7 @@ const BBlock = struct {
 	end: u64,
 	next: Buffer(*BBlock),
 	prev: Buffer(*BBlock),
+	declared: Buffer(*Expr),
 	read_write: Buffer(*Expr),
 	write: Buffer(*Expr),
 	live_in: Buffer(*Expr),
@@ -3337,6 +3364,7 @@ const BBlock = struct {
 			.end = i,
 			.next =Buffer(*BBlock).init(mem.*),
 			.prev =Buffer(*BBlock).init(mem.*),
+			.declared = Buffer(*Expr).init(mem.*),
 			.read_write = Buffer(*Expr).init(mem.*),
 			.write = Buffer(*Expr).init(mem.*),
 			.live_in = Buffer(*Expr).init(mem.*),
