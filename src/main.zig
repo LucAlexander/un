@@ -1197,6 +1197,7 @@ const Program = struct {
 						}
 					}
 					std.debug.print("Invalid mov args\n", .{});
+					show_expr(expr, 1);
 					return null;
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
@@ -1220,6 +1221,7 @@ const Program = struct {
 						}
 					}
 					std.debug.print("Invalid binary alu args for instruction {s}\n", .{expr.list.items[0].atom.text});
+					show_expr(expr, 1);
 					return null;
 				},
 				.NOT, .COM => {
@@ -2318,14 +2320,12 @@ const Program = struct {
 		var stack_offsets = Map(u64).init(self.mem.*);
 		var reg_of = Map(TOKEN).init(self.mem.*);
 		var var_of = std.AutoHashMap(TOKEN, *Expr).init(self.mem.*);
+		var aux_regs = Buffer(TOKEN).init(self.mem.*);
 		var free_regs = Buffer(TOKEN).init(self.mem.*);
 		free_regs.append(.REG4) catch unreachable;
 		free_regs.append(.REG5) catch unreachable;
 		free_regs.append(.REG6) catch unreachable;
 		free_regs.append(.REG7) catch unreachable;
-		free_regs.append(.REG8) catch unreachable;
-		free_regs.append(.REG9) catch unreachable;
-		free_regs.append(.REG10) catch unreachable;
 		var new = Buffer(*Expr).init(self.mem.*);
 		for (block_list.items) |block| {
 			var local_loop = false;
@@ -2341,7 +2341,11 @@ const Program = struct {
 			}
 			for (block.start .. block.end) |index| {
 				const inst = normalized.items[index];
-				var wrote_10: ?u64 = null;
+				var wrote_10: ?TOKEN = null;
+				aux_regs.clearRetainingCapacity();
+				aux_regs.append(.REG8) catch unreachable;
+				aux_regs.append(.REG9) catch unreachable;
+				aux_regs.append(.REG10) catch unreachable;
 				const copy = deep_copy(self.mem, inst);
 				switch (inst.list.items[0].atom.tag){
 					.REG => {
@@ -2381,42 +2385,42 @@ const Program = struct {
 						}
 					},
 					.MOV => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
+						wrote_10 = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, true, &aux_regs);
+						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
-						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false);
+						wrote_10 = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, true, &aux_regs);
+						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
+						_ = self.color_arg(copy.list.items[3], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.NOT, .COM => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
+						wrote_10 = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, true, &aux_regs);
+						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.CMP => {
-						_ = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, false);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
+						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
+						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.PSH => {
-						_ = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, false);
+						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.POP => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
+						wrote_10 = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, true, &aux_regs);
 					},
 					.REIF => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
+						wrote_10 = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, true, &aux_regs);
 					},
 					.INT => {
 						for (copy.list.items[1..inst.list.items.len]) |arg| {
-							_ = self.color_arg(arg, &reg_of, &var_of, &stack_offsets, &new, false);
+							_ = self.color_arg(arg, &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 						}
 					},
 					else => { }
 				}
 				new.append(copy)
 					catch unreachable;
-				if (wrote_10) |_| {
-					self.store_to_stack_offset(&new);
+				if (wrote_10) |reg| {
+					self.store_to_stack_offset(&new, reg);
 				}
 			}
 			var free_list = Buffer(TOKEN).init(self.mem.*);
@@ -2606,7 +2610,7 @@ const Program = struct {
 			catch unreachable;
 	}
 
-	pub fn color_arg(self: *Program, expr: *Expr, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), stack_offsets: *Map(u64), new: *Buffer(*Expr), write: bool) ?u64 {
+	pub fn color_arg(self: *Program, expr: *Expr, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), stack_offsets: *Map(u64), new: *Buffer(*Expr), write: bool, aux_regs: *Buffer(TOKEN)) ?TOKEN {
 		switch (expr.*){
 			.atom => {
 				switch(expr.atom.tag){
@@ -2628,23 +2632,21 @@ const Program = struct {
 					return null;
 				}
 				if (stack_offsets.get(expr.atom.text)) |offset| {
-					self.load_from_stack_offset(new, offset);
-					if (write){
-						expr.atom.tag = .REG10;
-					}
-					return offset;
+					const reg = self.load_from_stack_offset(new, offset, aux_regs);
+					expr.atom.tag = reg;
+					return reg;
 				}
 				std.debug.print("No register allocated for {s}\n", .{expr.atom.text});
 				std.debug.assert(false);
 			},
 			.list => {
-				return self.color_arg(expr.list.items[1], reg_of, var_of, stack_offsets, new, write);
+				return self.color_arg(expr.list.items[1], reg_of, var_of, stack_offsets, new, write, aux_regs);
 			}
 		}
 		unreachable;
 	}
 
-	pub fn store_to_stack_offset(self: *Program, new: *Buffer(*Expr)) void {
+	pub fn store_to_stack_offset(self: *Program, new: *Buffer(*Expr), reg: TOKEN) void {
 		const loc = self.mem.create(Expr)
 			catch unreachable;
 		loc.* = Expr{
@@ -2663,9 +2665,9 @@ const Program = struct {
 			catch unreachable;
 		dest.* = Expr{
 			.atom = Token{
-				.text = self.mem.dupe(u8, "r10") catch unreachable,
+				.text = self.mem.dupe(u8, "aux") catch unreachable,
 				.pos = 0,
-				.tag = .REG10
+				.tag = reg
 			}
 		};
 		const src = self.mem.create(Expr)
@@ -2699,7 +2701,7 @@ const Program = struct {
 		new.append(loc) catch unreachable;
 	}
 
-	pub fn load_from_stack_offset(self: *Program, new: *Buffer(*Expr), offset: u64) void {
+	pub fn load_from_stack_offset(self: *Program, new: *Buffer(*Expr), offset: u64, aux_regs: *Buffer(TOKEN)) TOKEN {
 		var load = self.mem.create(Expr)
 			catch unreachable;
 		load.* = Expr{
@@ -2807,11 +2809,13 @@ const Program = struct {
 		};
 		dest = self.mem.create(Expr)
 			catch unreachable;
+		const reg = aux_regs.items[0];
+		_ = aux_regs.orderedRemove(0);
 		dest.* = Expr{
 			.atom = Token{
-				.text = self.mem.dupe(u8, "r10") catch unreachable,
+				.text = self.mem.dupe(u8, "aux") catch unreachable,
 				.pos = 0,
-				.tag = .REG10
+				.tag = reg
 			}
 		};
 		src = self.mem.create(Expr)
@@ -2845,6 +2849,7 @@ const Program = struct {
 		new.append(load) catch unreachable;
 		new.append(off) catch unreachable;
 		new.append(loc) catch unreachable;
+		return reg;
 	}
 
 	pub fn evaluate(self: *Program, vm_target: Token, repr: ReifableRepr) *Expr {
