@@ -131,8 +131,7 @@ pub fn main() !void {
 			return;
 		}
 		program.prepend_reif(&normalized);
-		var record = Buffer(SpillRecord).init(mem);
-		normalized = program.color_cfg(&normalized, &record);
+		normalized = program.color_cfg(&normalized);
 		program.flatten_interrupts(&normalized);
 		program.inscribe_labels(&normalized);
 		var final = Expr{
@@ -1052,8 +1051,7 @@ const Program = struct {
 			}
 			std.debug.print("\n", .{});
 		}
-		var record = Buffer(SpillRecord).init(self.mem.*);
-		normalized = self.color_cfg(&normalized, &record);
+		normalized = self.color_cfg(&normalized);
 		if (debug){
 			std.debug.print("Colored:\n", .{});
 			for (normalized.items) |e| {
@@ -2155,7 +2153,7 @@ const Program = struct {
 		return true;
 	}
 
-	pub fn color_cfg(self: *Program, normalized: *Buffer(*Expr), record: *Buffer(SpillRecord)) Buffer(*Expr) {
+	pub fn color_cfg(self: *Program, normalized: *Buffer(*Expr)) Buffer(*Expr) {
 		var block_map = Map(*BBlock).init(self.mem.*);
 		var call_map = Map(bool).init(self.mem.*);
 		var block_chain = Map(Buffer(*BBlock)).init(self.mem.*);
@@ -2314,12 +2312,12 @@ const Program = struct {
 			visited.clearRetainingCapacity();
 		}
 		var loop = false;
-		var active_loops = AutoHashMap(*BBlock, bool).init(self.mem.*);
+		var active_loops = std.AutoHashMap(*BBlock, bool).init(self.mem.*);
 		var allocation_boundry:u64 = 0;
 		var stack_offset:u64 = 0;
 		var stack_offsets = Map(u64).init(self.mem.*);
-		var reg_of = Map(TOKEN);
-		var var_of = AutoHashMap(TOKEN, *Expr);
+		var reg_of = Map(TOKEN).init(self.mem.*);
+		var var_of = std.AutoHashMap(TOKEN, *Expr).init(self.mem.*);
 		var free_regs = Buffer(TOKEN).init(self.mem.*);
 		free_regs.append(.REG4) catch unreachable;
 		free_regs.append(.REG5) catch unreachable;
@@ -2336,7 +2334,7 @@ const Program = struct {
 					if (prev.start > block.end){
 						loop = true;
 						local_loop = true;
-						active_loops.append(prev)
+						active_loops.put(prev, true)
 							catch unreachable;
 					}
 				}
@@ -2345,7 +2343,7 @@ const Program = struct {
 				const inst = normalized.items[index];
 				var wrote_10: ?u64 = null;
 				const copy = deep_copy(self.mem, inst);
-				switch (inst.tag){
+				switch (inst.list.items[0].atom.tag){
 					.REG => {
 						if (local_loop){
 							stack_offsets.put(inst.list.items[1].atom.text, stack_offset)
@@ -2362,7 +2360,7 @@ const Program = struct {
 								const target = free_regs.orderedRemove(0);
 								reg_of.put(inst.list.items[1].atom.text, target)
 									catch unreachable;
-								var_of.put(target, inst.list.items[1].atom.text)
+								var_of.put(target, inst.list.items[1])
 									catch unreachable;
 							}
 						}
@@ -2376,42 +2374,42 @@ const Program = struct {
 						}
 					},
 					.MOV => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of);
+						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
+						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
 					},
 					.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of);
-						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of);
+						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
+						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
+						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false);
 					},
 					.NOT, .COM => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of);
+						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
+						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
 					},
 					.CMP => {
-						_ = self.color_arg(copy.list.items[0], &reg_of, &var_of);
-						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of);
+						_ = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, false);
+						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false);
 					},
 					.PSH => {
-						_ = self.color_arg(copy.list.items[0], &reg_of, &var_of);
+						_ = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, false);
 					},
 					.POP => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of);
+						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
 					},
 					.REIF => {
-						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of);
+						wrote_10 = self.color_arg(copy.list.items[0], &reg_of, &var_of, &stack_offsets, &new, true);
 					},
 					.INT => {
 						for (copy.list.items[1..inst.list.items.len]) |arg| {
-							_ = self.color_arg(arg, &reg_of, &var_of);
+							_ = self.color_arg(arg, &reg_of, &var_of, &stack_offsets, &new, false);
 						}
 					},
 					else => { }
 				}
 				new.append(copy)
 					catch unreachable;
-				if (wrote_10) |stack_position| {
-					self.write_back(&new, stack_position);
+				if (wrote_10) |_| {
+					self.store_to_stack_offset(&new);
 				}
 			}
 			var free_list = Buffer(TOKEN).init(self.mem.*);
@@ -2427,10 +2425,12 @@ const Program = struct {
 				}
 			}
 			for (free_list.items) |target| {
-				const variable = var_of.remove(target);
-				_ = reg_of.remove(variable.atom.text);
-				free_regs.append(target)
-					catch unreachable;
+				if (var_of.get(target)) |variable| {
+					_ = var_of.remove(target);
+					_ = reg_of.remove(variable.atom.text);
+					free_regs.append(target)
+						catch unreachable;
+				}
 			}
 		}
 		self.commit_allocation_boundry(&new, stack_offset, allocation_boundry);
@@ -2465,7 +2465,7 @@ const Program = struct {
 			catch unreachable;
 		const buf = self.mem.alloc(u8, 20)
 			catch unreachable;
-		const slice = std.fmt.bufPrint(buf, "{x}", .{stack_offset})\
+		const slice = std.fmt.bufPrint(buf, "{x}", .{stack_offset})
 			catch unreachable;
 		offset.* = Expr{
 			.atom = Token{
@@ -2482,482 +2482,69 @@ const Program = struct {
 			catch unreachable;
 	}
 
-	pub fn write_back(self: *Program, new: *Buffer(*Expr), offset: u64) void {
-		//TODO
-	}
-
-	pub fn color_arg(self: *Program, expr: *Expr, reg_of: *Map(TOKEN), var_of: *AutoHashMap(TOKEN, *Expr)) bool {
-		//TODO
-	}
-
-	pub fn color_expr(self: *Program, expr: *Expr, reg_of: *Map(TOKEN)) void {
-		std.debug.print("coloring: ", .{});
-		show_expr(expr, 1);
-		std.debug.print("\n", .{});
+	pub fn color_arg(self: *Program, expr: *Expr, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), stack_offsets: *Map(u64), new: *Buffer(*Expr), write: bool) ?u64 {
 		switch (expr.*){
 			.atom => {
 				switch(expr.atom.tag){
 					.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-						return;
+						return null;
 					},
 					else => {}
 				}
 				if (std.mem.eql(u8, "fp", expr.atom.text)){
 					expr.atom.tag = .FPTR;
-					return;
+					return null;
 				}
 				if (std.mem.eql(u8, "sp", expr.atom.text)){
 					expr.atom.tag = .SPTR;
-					return;
+					return null;
 				}
 				if (reg_of.get(expr.atom.text)) |reg| {
 					expr.atom.tag = reg;
-					return;
+					return null;
+				}
+				if (stack_offsets.get(expr.atom.text)) |offset| {
+					self.load_from_stack_offset(new, offset);
+					if (write){
+						expr.atom.tag = .REG10;
+					}
+					return offset;
 				}
 				std.debug.print("No register allocated for {s}\n", .{expr.atom.text});
 				std.debug.assert(false);
 			},
 			.list => {
-				switch (expr.list.items[0].atom.tag){
-					.LABEL, .JMP, .JEQ, .JNE, .JGE, .JGT, .JLE, .JLT => {
-						return;
-					},
-					else => {}
-				}
-				var first = true;
-				for (expr.list.items) |sub| {
-					if (first){
-						first = false;
-						continue;
-					}
-					self.color_expr(sub, reg_of);
-				}
+				return self.color_arg(expr.list.items[1], reg_of, var_of, stack_offsets, new, write);
 			}
 		}
+		unreachable;
 	}
 
-	pub fn color_read(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), after_index: u64, index: u64, record: *Buffer(SpillRecord), temp_relations: *Map(*Expr)) bool {
-		std.debug.print("color read\n", .{});
-		var variable = expr;
-		var is_at = false;
-		if (expr.* == .list){
-			is_at = true;
-			variable = expr.list.items[1];
-		}
-		switch (variable.atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-				return false;
-			},
-			else => {}
-		}
-		std.debug.print("checking read to variable {s}\n", .{variable.atom.text});
-		if (reg_of.get(variable.atom.text)) |already| {
-			std.debug.print("  already allocated to {s} {}\n", .{variable.atom.text, already});
-			if (var_of.get(already)) |v| {
-				std.debug.print("  and is also relate as {} {s}\n", .{already, v.atom.text});
-			}
-			return false;
-		}
-		var restart = false;
-		if (stack_offsets.get(variable.atom.text)) |offset| {
-			std.debug.print("  exists at an offset\n", .{});
-			if (free_regs.items.len == 0){
-				std.debug.print("    no free registers, spilling\n", .{});
-				if (is_at){
-					if (temp_relations.get(variable.atom.text)) |temporary| {
-						variable = temporary;
-						expr.list.items[1] = temporary;
-					}
-				}
-				else{
-					if (temp_relations.get(variable.atom.text)) |temporary| {
-						variable = temporary;
-						expr.* = temporary.*;
-					}
-				}
-				restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
-			}
-			else{
-				const reg = free_regs.orderedRemove(0);
-				std.debug.print("    allocating free register {}\n", .{reg});
-				if (var_of.get(reg)) |old_var| {
-					std.debug.print("    purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
-					_ = reg_of.remove(old_var.atom.text);
-					_ = var_of.remove(reg);
-				}
-				reg_of.put(variable.atom.text, reg)
-					catch unreachable;
-				var_of.put(reg, variable)
-					catch unreachable;
-				const temporary = self.load_from_stack_offset(reg, offset, new, match);
-				temp_relations.put(variable.atom.text, temporary)
-					catch unreachable;
-				for (record.items) |spill_record| {
-					if (spill_record.block == block){
-						if (std.mem.eql(u8, spill_record.variable.atom.text, variable.atom.text)){
-							return false;
-						}
-					}
-				}
-				record.append(SpillRecord{
-					.block = block,
-					.variable = variable,
-					.index = block.start + after_index
-				}) catch unreachable;
-				return true;
-			}
-			return restart;
-		}
-		if (is_at){
-			if (temp_relations.get(variable.atom.text)) |temporary| {
-				std.debug.print("replacing with temporary\n", .{});
-				variable = temporary;
-				expr.list.items[1] = temporary;
-			}
-		}
-		else{
-			if (temp_relations.get(variable.atom.text)) |temporary| {
-				std.debug.print("replacing with temporary\n", .{});
-				variable = temporary;
-				expr.* = temporary.*;
-			}
-		}
-		if (free_regs.items.len == 0){
-			std.debug.print("  no free registers, spilling\n", .{});
-			restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
-		}
-		else{
-			const reg = free_regs.orderedRemove(0);
-			std.debug.print("  allocating free register {}\n", .{reg});
-			if (var_of.get(reg)) |old_var| {
-				std.debug.print("  purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
-				_ = reg_of.remove(old_var.atom.text);
-				_ = var_of.remove(reg);
-			}
-			reg_of.put(variable.atom.text, reg)
-				catch unreachable;
-			var_of.put(reg, variable)
-				catch unreachable;
-		}
-		return restart;
-	}
-
-	pub fn color_write(self: *Program, expr: *Expr, block: *BBlock, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), free_regs: *Buffer(TOKEN), stack_position: *u64, stack_offsets: *Map(u64), new: *Buffer(*Expr), match: *Buffer(*Expr), after_index: u64, index: u64, record: *Buffer(SpillRecord), temp_relations: *Map(*Expr)) bool {
-		std.debug.print("color_write\n", .{});
-		var variable = expr;
-		if (expr.* == .list){
-			variable = expr.list.items[1];
-			if (variable.atom.tag == .IDEN){
-				if (temp_relations.get(variable.atom.text)) |temporary| {
-					variable = temporary;
-					expr.list.items[1] = temporary;
-				}
-			}
-		}
-		else{
-			if (variable.atom.tag == .IDEN){
-				if (temp_relations.get(variable.atom.text)) |temporary| {
-					variable = temporary;
-					expr.* = temporary.*;
-				}
-			}
-		}
-		switch (variable.atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-				std.debug.print("variable is register, returning\n", .{});
-				return false;
-			},
-			else => {}
-		}
-		std.debug.print("checking write to variable {s}\n", .{variable.atom.text});
-		if (reg_of.get(variable.atom.text)) |already| {
-			std.debug.print("  already allocated to {}\n", .{already});
-			return false;
-		}
-		var restart = false;
-		if (stack_offsets.get(variable.atom.text)) |_| {
-			std.debug.print("  exists at an offset\n", .{});
-			if (free_regs.items.len == 0){
-				std.debug.print("    no free registers, spilling\n", .{});
-				restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
-			}
-			else{
-				const reg = free_regs.orderedRemove(0);
-				std.debug.print("    allocating free register {}\n", .{reg});
-				if (var_of.get(reg)) |old_var| {
-					std.debug.print("    purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
-					_ = reg_of.remove(old_var.atom.text);
-					_ = var_of.remove(reg);
-				}
-				std.debug.print("{s} -> {}\n", .{variable.atom.text, reg});
-				reg_of.put(variable.atom.text, reg)
-					catch unreachable;
-				std.debug.print("{} -> {s}\n", .{reg, variable.atom.text});
-				var_of.put(reg, variable)
-					catch unreachable;
-			}
-		}
-		else if (free_regs.items.len == 0){
-			std.debug.print("  no free registers, spilling\n", .{});
-			restart = self.spill(variable, block, stack_offsets, reg_of, var_of, stack_position, new, match, after_index, index, record);
-		}
-		else{
-			const reg = free_regs.orderedRemove(0);
-			std.debug.print("  allocating free register {}\n", .{reg});
-			if (var_of.get(reg)) |old_var| {
-				std.debug.print("  purging old relation {s} -> {}\n", .{old_var.atom.text, reg});
-				_ = reg_of.remove(old_var.atom.text);
-				_ = var_of.remove(reg);
-			}
-			std.debug.print("{s} -> {}\n", .{variable.atom.text, reg});
-			reg_of.put(variable.atom.text, reg)
-				catch unreachable;
-			std.debug.print("{} -> {s}\n", .{reg, variable.atom.text});
-			var_of.put(reg, variable)
-				catch unreachable;
-		}
-		return restart;
-	}
-
-	fn already_spilled(
-		_: *Program,
-		record: *Buffer(SpillRecord),
-		block: *BBlock,
-		variable: *Expr,
-		index: u64,
-	) bool {
-		for (record.items) |r| {
-			if (r.block == block and r.index == index and std.mem.eql(u8, r.variable.atom.text, variable.atom.text)){
-				return true;
-			}
-		}
-		return false;
-	}
-
-	pub fn spill(
-		self: *Program,
-		in: *Expr,
-		block: *BBlock,
-		stack_offsets: *Map(u64),
-		reg_of: *Map(TOKEN),
-		var_of: *std.AutoHashMap(TOKEN, *Expr),
-		stack_position: *u64,
-		new: *Buffer(*Expr),
-		match: *Buffer(*Expr),
-		after_index: u64,
-		index: u64,
-		record: *Buffer(SpillRecord)
-	) bool {
-		var reg: TOKEN = undefined;
-		var it = var_of.iterator();
-		var first = true;
-		outer: while (it.next()) |entry| {
-			const candidate = entry.key_ptr.*;
-			if (first){
-				first = false;
-				reg = candidate;
-			}
-			const variable = entry.value_ptr.*;
-			for (block.live_after.?.items[after_index].items) |out| {
-				if (std.mem.eql(u8, out.atom.text, variable.atom.text)){
-					continue :outer;
-				}
-			}
-			reg = candidate;
-			break;
-		}
-		if (var_of.get(reg)) |variable| {
-			if (self.already_spilled(record, block, variable, index)){
-				return false;
-			}
-			if (stack_offsets.get(variable.atom.text)) |inner_offset| {
-				self.store_to_stack_offset(variable, reg, inner_offset, new, match);
-			}
-			else{
-				stack_offsets.put(variable.atom.text, stack_position.*)
-					catch unreachable;
-				self.push_to_stack_offset(variable, reg, new, match);
-				stack_position.* += 8;
-			}
-			if (block.live_after) |live_after| {
-				outer: for (live_after.items[after_index].items) |specimen| {
-					if (std.mem.eql(u8, specimen.atom.text, variable.atom.text)){
-						for (record.items) |spill_record| {
-							if (spill_record.block == block){
-								if (std.mem.eql(u8, spill_record.variable.atom.text, variable.atom.text)){
-									continue :outer;
-								}
-							}
-						}
-						record.append(SpillRecord{
-							.block = block,
-							.variable = variable,
-							.index = index
-						}) catch unreachable;
-						return true;
-					}
-				}
-			}
-		}
-		else{
-			std.debug.assert(false);
-		}
-		if (var_of.get(reg)) |old_var| {
-			std.debug.print("purging relation {s} <-> {}\n", .{old_var.atom.text, reg});
-			_ = reg_of.remove(old_var.atom.text);
-			_ = var_of.remove(reg);
-		}
-		reg_of.put(in.atom.text, reg)
+	pub fn store_to_stack_offset(self: *Program, new: *Buffer(*Expr)) void {
+		const loc = self.mem.create(Expr)
 			catch unreachable;
-		var_of.put(reg, in)
-			catch unreachable;
-		return false;
-	}
-
-	pub fn push_to_stack_offset(self: *Program, variable: *Expr, reg: TOKEN, new: *Buffer(*Expr), match: *Buffer(*Expr)) void {
-		var psh = self.mem.create(Expr)
-			catch unreachable;
-		psh.* = Expr{
+		loc.* = Expr{
 			.list = Buffer(*Expr).init(self.mem.*)
 		};
 		const op = self.mem.create(Expr)
 			catch unreachable;
 		op.* = Expr{
 			.atom = Token{
-				.text = self.mem.dupe(u8, "psh") catch unreachable,
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
 				.pos = 0,
-				.tag = .PSH
+				.tag = .MOV
 			}
 		};
 		const dest = self.mem.create(Expr)
 			catch unreachable;
 		dest.* = Expr{
 			.atom = Token{
-				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.text = self.mem.dupe(u8, "r10") catch unreachable,
 				.pos = 0,
-				.tag = reg
+				.tag = .REG10
 			}
 		};
-		var other_psh = self.mem.create(Expr)
-			catch unreachable;
-		other_psh.* = Expr{
-			.list = Buffer(*Expr).init(self.mem.*)
-		};
-		other_psh.list.append(op) catch unreachable;
-		other_psh.list.append(variable) catch unreachable;
-		match.append(other_psh) catch unreachable;
-		psh.list.append(op) catch unreachable;
-		psh.list.append(dest) catch unreachable;
-		new.append(psh) catch unreachable;
-	}
-
-	pub fn store_to_stack_offset(self: *Program, variable: *Expr, reg: TOKEN, offset: u64, new: *Buffer(*Expr), match: *Buffer(*Expr)) void {
-		var load = self.mem.create(Expr)
-			catch unreachable;
-		load.* = Expr{
-			.list = Buffer(*Expr).init(self.mem.*)
-		};
-		var op = self.mem.create(Expr)
-			catch unreachable;
-		op.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "mov") catch unreachable,
-				.pos = 0,
-				.tag = .MOV
-			}
-		};
-		var dest = self.mem.create(Expr)
-			catch unreachable;
-		dest.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "r11") catch unreachable,
-				.pos = 0,
-				.tag = .REG11
-			}
-		};
-		var src = self.mem.create(Expr)
-			catch unreachable;
-		src.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "fp") catch unreachable,
-				.pos = 0,
-				.tag = .FPTR
-			}
-		};
-		load.list.append(op)
-			catch unreachable;
-		load.list.append(dest)
-			catch unreachable;
-		load.list.append(src)
-			catch unreachable;
-		var off = self.mem.create(Expr)
-			catch unreachable;
-		off.* = Expr{
-			.list = Buffer(*Expr).init(self.mem.*)
-		};
-		op = self.mem.create(Expr)
-			catch unreachable;
-		op.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "sub") catch unreachable,
-				.pos = 0,
-				.tag = .SUB
-			}
-		};
-		dest = self.mem.create(Expr)
-			catch unreachable;
-		dest.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "r11") catch unreachable,
-				.pos = 0,
-				.tag = .REG11
-			}
-		};
-		src = self.mem.create(Expr)
-			catch unreachable;
-		const buffer = self.mem.alloc(u8, 20)
-			catch unreachable;
-		const slice = std.fmt.bufPrint(buffer, "{x}", .{offset})
-			catch unreachable;
-		src.* = Expr{
-			.atom = Token{
-				.text = slice,
-				.pos = 0,
-				.tag = .NUM
-			}
-		};
-		off.list.append(op)
-			catch unreachable;
-		off.list.append(dest)
-			catch unreachable;
-		off.list.append(dest)
-			catch unreachable;
-		off.list.append(src)
-			catch unreachable;
-		var loc = self.mem.create(Expr)
-			catch unreachable;
-		loc.* = Expr{
-			.list = Buffer(*Expr).init(self.mem.*)
-		};
-		op = self.mem.create(Expr)
-			catch unreachable;
-		op.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "mov") catch unreachable,
-				.pos = 0,
-				.tag = .MOV
-			}
-		};
-		dest = self.mem.create(Expr)
-			catch unreachable;
-		dest.* = Expr{
-			.atom = Token{
-				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
-				.pos = 0,
-				.tag = reg
-			}
-		};
-		src = self.mem.create(Expr)
+		const src = self.mem.create(Expr)
 			catch unreachable;
 		src.* = Expr{
 			.list = Buffer(*Expr).init(self.mem.*)
@@ -2980,33 +2567,15 @@ const Program = struct {
 				.tag = .REG11
 			}
 		};
-		src.list.append(at)
-			catch unreachable;
-		src.list.append(dref)
-			catch unreachable;
-		loc.list.append(op)
-			catch unreachable;
-		loc.list.append(src)
-			catch unreachable;
-		loc.list.append(dest)
-			catch unreachable;
-		var other_loc = self.mem.create(Expr)
-			catch unreachable;
-		other_loc.* = Expr{
-			.list = Buffer(*Expr).init(self.mem.*)
-		};
-		other_loc.list.append(op) catch unreachable;
-		other_loc.list.append(src) catch unreachable;
-		other_loc.list.append(variable) catch unreachable;
-		match.append(load) catch unreachable;
-		match.append(off) catch unreachable;
-		match.append(other_loc) catch unreachable;
-		new.append(load) catch unreachable;
-		new.append(off) catch unreachable;
+		src.list.append(at) catch unreachable;
+		src.list.append(dref) catch unreachable;
+		loc.list.append(op) catch unreachable;
+		loc.list.append(src) catch unreachable;
+		loc.list.append(dest) catch unreachable;
 		new.append(loc) catch unreachable;
 	}
 
-	pub fn load_from_stack_offset(self: *Program, reg: TOKEN, offset: u64, new: *Buffer(*Expr), match: *Buffer(*Expr)) *Expr {
+	pub fn load_from_stack_offset(self: *Program, new: *Buffer(*Expr), offset: u64) void {
 		var load = self.mem.create(Expr)
 			catch unreachable;
 		load.* = Expr{
@@ -3116,9 +2685,9 @@ const Program = struct {
 			catch unreachable;
 		dest.* = Expr{
 			.atom = Token{
-				.text = self.mem.dupe(u8, "REGISTER") catch unreachable,
+				.text = self.mem.dupe(u8, "r10") catch unreachable,
 				.pos = 0,
-				.tag = reg
+				.tag = .REG10
 			}
 		};
 		src = self.mem.create(Expr)
@@ -3144,31 +2713,14 @@ const Program = struct {
 				.tag = .REG11
 			}
 		};
-		const other_loc = self.mem.create(Expr)
-			catch unreachable;
-		other_loc.* = Expr{
-			.list = Buffer(*Expr).init(self.mem.*)
-		};
-		other_loc.list.append(op) catch unreachable;
-		other_loc.list.append(temp) catch unreachable;
-		other_loc.list.append(src) catch unreachable;
-		src.list.append(at)
-			catch unreachable;
-		src.list.append(dref)
-			catch unreachable;
-		loc.list.append(op)
-			catch unreachable;
-		loc.list.append(dest)
-			catch unreachable;
-		loc.list.append(src)
-			catch unreachable;
+		src.list.append(at) catch unreachable;
+		src.list.append(dref) catch unreachable;
+		loc.list.append(op) catch unreachable;
+		loc.list.append(dest) catch unreachable;
+		loc.list.append(src) catch unreachable;
 		new.append(load) catch unreachable;
 		new.append(off) catch unreachable;
 		new.append(loc) catch unreachable;
-		match.append(load) catch unreachable;
-		match.append(off) catch unreachable;
-		match.append(other_loc) catch unreachable;
-		return temp;
 	}
 
 	pub fn backward_dfs_cfg(self: *Program, current_block: *BBlock, visited: *std.AutoHashMap(*BBlock, bool)) bool {
