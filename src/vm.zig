@@ -1426,9 +1426,6 @@ pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	core.reg[rsp] -= 8;
 	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rip]+1;
-	core.reg[rsp] -= 8;
-	vm.memory.words[core.reg[rsp] >> 3] = core.reg[rfp];
-	core.reg[rfp] = core.reg[rsp];
 	core.reg[rip] +%= @bitCast(off);
 	return true;
 }
@@ -1439,8 +1436,6 @@ pub fn ret_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
-	core.reg[rsp] = core.reg[rfp];
-	core.reg[rfp] = vm.memory.words[core.reg[rsp] >> 3];
 	core.reg[rsp] += 8;
 	core.reg[rip] = vm.memory.words[core.reg[rsp] >> 3];
 	vm.memory.words[core.reg[rsp] >> 3] = core.reg[reg];
@@ -1453,8 +1448,6 @@ pub fn ret_l(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 	}
 	const inst = vm.memory.half_words[ip.*];
 	const lit = (inst & 0xFF00) >> 0x8;
-	core.reg[rsp] = core.reg[rfp];
-	core.reg[rfp] = vm.memory.words[core.reg[rsp] >> 3];
 	core.reg[rsp] += 8;
 	core.reg[rip] = vm.memory.words[core.reg[rsp] >> 3];
 	vm.memory.words[core.reg[rsp] >> 3] = lit;
