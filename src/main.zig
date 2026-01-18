@@ -2351,7 +2351,7 @@ const Program = struct {
 							stack_offset += 8;
 						}
 						else{
-							if (free_regs.items.len == 0){
+							if (loop or free_regs.items.len == 0){
 								stack_offsets.put(inst.list.items[1].atom.text, stack_offset)
 									catch unreachable;
 								stack_offset += 8;
@@ -2371,6 +2371,13 @@ const Program = struct {
 							allocation_boundry = new.items.len;
 							stack_offset = 0;
 							stack_offsets.clearRetainingCapacity();
+						}
+						if (active_loops.remove(inst.list.items[1].atom.text)){
+							loop = false;
+							var it = active_loops.iterator();
+							while (it.next()) |_| {
+								loop = true;
+							}
 						}
 					},
 					.MOV => {
@@ -2721,123 +2728,6 @@ const Program = struct {
 		new.append(load) catch unreachable;
 		new.append(off) catch unreachable;
 		new.append(loc) catch unreachable;
-	}
-
-	pub fn backward_dfs_cfg(self: *Program, current_block: *BBlock, visited: *std.AutoHashMap(*BBlock, bool)) bool {
-		if (visited.get(current_block)) |_| {
-			return false;
-		}
-		var changes = false;
-		visited.put(current_block, true)
-			catch unreachable;
-		for (current_block.next.items) |next| {
-			outer: for (next.live_in.items) |in| {
-				for (current_block.live_out.items) |out| {
-					if (std.mem.eql(u8, in.atom.text, out.atom.text)){
-						continue :outer;
-					}
-				}
-				current_block.live_out.append(in)
-					catch unreachable;
-				changes = true;
-			}
-		}
-		if (changes){
-			current_block.live_in.clearRetainingCapacity();
-			current_block.live_in.appendSlice(current_block.read_write.items)
-				catch unreachable;
-			outer: for (current_block.live_out.items) |out| {
-				for (current_block.write.items) |def| {
-					if (std.mem.eql(u8, out.atom.text, def.atom.text)){
-						continue :outer;
-					}
-				}
-				current_block.live_in.append(out)
-					catch unreachable;
-			}
-		}
-		for (current_block.prev.items) |prev| {
-			changes = changes or self.backward_dfs_cfg(prev, visited);
-		}
-		return changes;
-	}
-
-	pub fn check_var_read(_: *Program, current_block: *BBlock, expr: *Expr) void {
-		if (expr.* == .list){
-			std.debug.assert(expr.list.items[0].* == .atom);
-			std.debug.assert(expr.list.items[0].atom.tag == .AT);
-			switch(expr.list.items[1].atom.tag){
-				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-					return;
-				},
-				else => {}
-			}
-			for (current_block.write.items) |candidate| {
-				if (std.mem.eql(u8, candidate.atom.text, expr.list.items[1].atom.text)){
-					return;
-				}
-			}
-			for (current_block.read_write.items) |exists| {
-				if (std.mem.eql(u8, exists.atom.text, expr.list.items[1].atom.text)){
-					return;
-				}
-			}
-			current_block.read_write.append(expr.list.items[1])
-				catch unreachable;
-			return;
-		}
-		switch(expr.atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-				return;
-			},
-			else => {}
-		}
-		for (current_block.write.items) |candidate| {
-			if (std.mem.eql(u8, candidate.atom.text, expr.atom.text)){
-				return;
-			}
-		}
-		for (current_block.read_write.items) |exists| {
-			if (std.mem.eql(u8, exists.atom.text, expr.atom.text)){
-				return;
-			}
-		}
-		current_block.read_write.append(expr)
-			catch unreachable;
-	}
-
-	pub fn check_var_write(_: *Program, current_block: *BBlock, expr: *Expr) void {
-		if (expr.* == .list){
-			std.debug.assert(expr.list.items[0].* == .atom);
-			std.debug.assert(expr.list.items[0].atom.tag == .AT);
-			switch(expr.list.items[1].atom.tag){
-				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-					return;
-				},
-				else => {}
-			}
-			for (current_block.write.items) |exists| {
-				if (std.mem.eql(u8, exists.atom.text, expr.list.items[1].atom.text)){
-					return;
-				}
-			}
-			current_block.write.append(expr.list.items[1])
-				catch unreachable;
-			return;
-		}
-		switch(expr.atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
-				return;
-			},
-			else => {}
-		}
-		for (current_block.write.items) |exists| {
-			if (std.mem.eql(u8, exists.atom.text, expr.atom.text)){
-				return;
-			}
-		}
-		current_block.write.append(expr)
-			catch unreachable;
 	}
 
 	pub fn evaluate(self: *Program, vm_target: Token, repr: ReifableRepr) *Expr {
