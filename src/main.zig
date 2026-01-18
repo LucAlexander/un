@@ -2484,6 +2484,9 @@ const Program = struct {
 				}
 				for (free_list.items) |register| {
 					if (var_of.get(register)) |candidate| {
+						if (self.already_spilled(record, block, candidate, index)){
+							continue;
+						}
 						if (stack_offsets.get(candidate.atom.text)) |inner_offset| {
 							self.store_to_stack_offset(candidate, register, inner_offset, &new, &match);
 						}
@@ -2593,6 +2596,9 @@ const Program = struct {
 			}
 			outer: for (block.live_out.items) |out| {
 				if (reg_of.get(out.atom.text)) |reg| {
+					if (self.already_spilled(record, block, out, block.end)){
+						continue;
+					}
 					if (stack_offsets.get(out.atom.text)) |offset| {
 						self.store_to_stack_offset(out, reg, offset, &new, &match);
 					}
@@ -2853,6 +2859,21 @@ const Program = struct {
 		return restart;
 	}
 
+	fn already_spilled(
+		_: *Program,
+		record: *Buffer(SpillRecord),
+		block: *BBlock,
+		variable: *Expr,
+		index: u64,
+	) bool {
+		for (record.items) |r| {
+			if (r.block == block and r.index == index and std.mem.eql(u8, r.variable.atom.text, variable.atom.text)){
+				return true;
+			}
+		}
+		return false;
+	}
+
 	pub fn spill(
 		self: *Program,
 		in: *Expr,
@@ -2886,6 +2907,9 @@ const Program = struct {
 			break;
 		}
 		if (var_of.get(reg)) |variable| {
+			if (self.already_spilled(record, block, variable, index)){
+				return false;
+			}
 			if (stack_offsets.get(variable.atom.text)) |inner_offset| {
 				self.store_to_stack_offset(variable, reg, inner_offset, new, match);
 			}
