@@ -2337,7 +2337,7 @@ const Program = struct {
 			}
 			for (block.start .. block.end) |index| {
 				const inst = normalized.items[index];
-				var wrote_10: ?TOKEN = null;
+				var wrote_10: ?WriteRecord= null;
 				aux_regs.clearRetainingCapacity();
 				aux_regs.append(.REG8) catch unreachable;
 				aux_regs.append(.REG9) catch unreachable;
@@ -2415,8 +2415,8 @@ const Program = struct {
 				}
 				new.append(copy)
 					catch unreachable;
-				if (wrote_10) |reg| {
-					self.store_to_stack_offset(&new, reg);
+				if (wrote_10) |record| {
+					self.store_to_stack_offset(&new, record);
 				}
 			}
 			var free_list = Buffer(TOKEN).init(self.mem.*);
@@ -2653,7 +2653,7 @@ const Program = struct {
 			catch unreachable;
 	}
 
-	pub fn color_arg(self: *Program, expr: *Expr, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), stack_offsets: *Map(u64), new: *Buffer(*Expr), write: bool, aux_regs: *Buffer(TOKEN)) ?TOKEN {
+	pub fn color_arg(self: *Program, expr: *Expr, reg_of: *Map(TOKEN), var_of: *std.AutoHashMap(TOKEN, *Expr), stack_offsets: *Map(u64), new: *Buffer(*Expr), write: bool, aux_regs: *Buffer(TOKEN)) ?WriteRecord{
 		switch (expr.*){
 			.atom => {
 				switch(expr.atom.tag){
@@ -2677,7 +2677,10 @@ const Program = struct {
 				if (stack_offsets.get(expr.atom.text)) |offset| {
 					const reg = self.load_from_stack_offset(new, offset, aux_regs);
 					expr.atom.tag = reg;
-					return reg;
+					return WriteRecord{
+						.reg=reg,
+						.index=offset
+					};
 				}
 				std.debug.print("No register allocated for {s}\n", .{expr.atom.text});
 				std.debug.assert(false);
@@ -2689,13 +2692,15 @@ const Program = struct {
 		unreachable;
 	}
 
-	pub fn store_to_stack_offset(self: *Program, new: *Buffer(*Expr), reg: TOKEN) void {
-		const loc = self.mem.create(Expr)
+	pub fn store_to_stack_offset(self: *Program, new: *Buffer(*Expr), record: WriteRecord) void {
+		const reg = record.reg;
+		const offset = record.index;
+		var load = self.mem.create(Expr)
 			catch unreachable;
-		loc.* = Expr{
+		load.* = Expr{
 			.list = Buffer(*Expr).init(self.mem.*)
 		};
-		const op = self.mem.create(Expr)
+		var op = self.mem.create(Expr)
 			catch unreachable;
 		op.* = Expr{
 			.atom = Token{
@@ -2704,7 +2709,89 @@ const Program = struct {
 				.tag = .MOV
 			}
 		};
-		const dest = self.mem.create(Expr)
+		var dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		var src = self.mem.create(Expr)
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "fp") catch unreachable,
+				.pos = 0,
+				.tag = .FPTR
+			}
+		};
+		load.list.append(op)
+			catch unreachable;
+		load.list.append(dest)
+			catch unreachable;
+		load.list.append(src)
+			catch unreachable;
+		var off = self.mem.create(Expr)
+			catch unreachable;
+		off.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "sub") catch unreachable,
+				.pos = 0,
+				.tag = .SUB
+			}
+		};
+		dest = self.mem.create(Expr)
+			catch unreachable;
+		dest.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "r11") catch unreachable,
+				.pos = 0,
+				.tag = .REG11
+			}
+		};
+		src = self.mem.create(Expr)
+			catch unreachable;
+		const buffer = self.mem.alloc(u8, 20)
+			catch unreachable;
+		const slice = std.fmt.bufPrint(buffer, "{x}", .{offset})
+			catch unreachable;
+		src.* = Expr{
+			.atom = Token{
+				.text = slice,
+				.pos = 0,
+				.tag = .NUM
+			}
+		};
+		off.list.append(op)
+			catch unreachable;
+		off.list.append(dest)
+			catch unreachable;
+		off.list.append(dest)
+			catch unreachable;
+		off.list.append(src)
+			catch unreachable;
+		const loc = self.mem.create(Expr)
+			catch unreachable;
+		loc.* = Expr{
+			.list = Buffer(*Expr).init(self.mem.*)
+		};
+		op = self.mem.create(Expr)
+			catch unreachable;
+		op.* = Expr{
+			.atom = Token{
+				.text = self.mem.dupe(u8, "mov") catch unreachable,
+				.pos = 0,
+				.tag = .MOV
+			}
+		};
+		dest = self.mem.create(Expr)
 			catch unreachable;
 		dest.* = Expr{
 			.atom = Token{
@@ -2713,7 +2800,7 @@ const Program = struct {
 				.tag = reg
 			}
 		};
-		const src = self.mem.create(Expr)
+		src = self.mem.create(Expr)
 			catch unreachable;
 		src.* = Expr{
 			.list = Buffer(*Expr).init(self.mem.*)
@@ -2741,6 +2828,8 @@ const Program = struct {
 		loc.list.append(op) catch unreachable;
 		loc.list.append(src) catch unreachable;
 		loc.list.append(dest) catch unreachable;
+		new.append(load) catch unreachable;
+		new.append(off) catch unreachable;
 		new.append(loc) catch unreachable;
 	}
 
@@ -3655,9 +3744,8 @@ pub fn uid(mem: *const std.mem.Allocator) []u8 {
 	return new;
 }
 
-const SpillRecord = struct {
-	block: *BBlock,
-	variable: *Expr,
-	index: u64
+const WriteRecord = struct {
+	index: u64,
+	reg: TOKEN
 };
 
