@@ -1,8 +1,8 @@
 const std = @import("std");
 const Buffer = std.ArrayList;
 
-const debug = false;
-const debugger = true;
+const debug = true;
+const debugger = false;
 
 pub const Config = struct {
 	screen_width: u64,
@@ -315,6 +315,44 @@ pub const VM = struct {
 				_ = stdin.read(&buffer)
 					catch unreachable;
 			}
+			if (debug){
+				const inv: [85]Inverse = .{
+					inv_mov_rr, inv_mov_rl, inv_mov_rdr, 
+					inv_mov_drr, inv_mov_drl, inv_mov_drdr,
+					inv_add_rrr, inv_add_rrl, inv_add_rlr, inv_add_rll,
+					inv_sub_rrr, inv_sub_rrl, inv_sub_rlr, inv_sub_rll,
+					inv_mul_rrr, inv_mul_rrl, inv_mul_rlr, inv_mul_rll,
+					inv_div_rrr, inv_div_rrl, inv_div_rlr, inv_div_rll,
+					inv_mod_rrr, inv_mod_rrl, inv_mod_rlr, inv_mod_rll,
+					inv_uadd_rrr, inv_uadd_rrl, inv_uadd_rlr, inv_uadd_rll,
+					inv_umul_rrr, inv_umul_rrl, inv_umul_rlr, inv_umul_rll,
+					inv_usub_rrr, inv_usub_rrl, inv_usub_rlr, inv_usub_rll,
+					inv_udiv_rrr, inv_udiv_rrl, inv_udiv_rlr, inv_udiv_rll,
+					inv_umod_rrr, inv_umod_rrl, inv_umod_rlr, inv_umod_rll,
+					inv_shr_rrr, inv_shr_rrl, inv_shr_rlr, inv_shr_rll,
+					inv_shl_rrr, inv_shl_rrl, inv_shl_rlr, inv_shl_rll,
+					inv_and_rrr, inv_and_rrl, inv_and_rlr, inv_and_rll,
+					inv_or_rrr, inv_or_rrl, inv_or_rlr, inv_or_rll,
+					inv_xor_rrr, inv_xor_rrl, inv_xor_rlr, inv_xor_rll,
+					inv_not_rr, inv_not_rl,
+					inv_com_rr, inv_com_rl,
+					inv_cmp_rr, inv_cmp_rl,
+					inv_jmp, inv_jeq, inv_jle, inv_jgt, inv_jge, inv_jlt, inv_jle,
+					inv_call, inv_ret_r, inv_ret_l,
+					inv_psh_r, inv_pop_r,
+					inv_int
+				};
+				const begin = ip.* << 2;
+				const op = vm.memory.mem[begin];
+				const a = vm.memory.mem[begin+1];
+				const b = vm.memory.mem[begin+2];
+				const c = vm.memory.mem[begin+3];
+				if (op < inv.len){
+					std.debug.print("{x:02} {x:02} {x:02} {x:02} -> ", .{op, a, b, c});
+					inv[op](a, b, c);
+					std.debug.print("\n", .{});
+				}
+			}
 			running = ops[vm.memory.half_words[ip.*]&0xFF](vm, core_ptr, ip);
 		}
 	}
@@ -335,9 +373,6 @@ pub fn core_worker(vm: *VM, thread_index: u64) void {
 }
 
 pub fn mov_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mov_rr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -347,9 +382,6 @@ pub fn mov_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mov_rl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	const lit = (inst & 0xFFFF0000) >> 0x10;
@@ -359,9 +391,6 @@ pub fn mov_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_rdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mov_rdr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -371,9 +400,6 @@ pub fn mov_rdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_drr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mov_drr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -383,9 +409,6 @@ pub fn mov_drr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_drl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mov_drl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	const lit = (inst & 0xFFFF0000) >> 0x10;
@@ -395,9 +418,6 @@ pub fn mov_drl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mov_drdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mov_drdr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -407,9 +427,6 @@ pub fn mov_drdr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("add_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -422,9 +439,6 @@ pub fn add_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("add_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -437,9 +451,6 @@ pub fn add_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("add_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -452,9 +463,6 @@ pub fn add_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn add_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("add_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -467,9 +475,6 @@ pub fn add_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("sub_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -482,9 +487,6 @@ pub fn sub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("sub_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -497,9 +499,6 @@ pub fn sub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("sub_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -512,9 +511,6 @@ pub fn sub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn sub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("sub_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -527,9 +523,6 @@ pub fn sub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mul_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -542,9 +535,6 @@ pub fn mul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mul_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -557,9 +547,6 @@ pub fn mul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mul_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -572,9 +559,6 @@ pub fn mul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mul_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -587,9 +571,6 @@ pub fn mul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("div_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -602,9 +583,6 @@ pub fn div_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("div_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -617,9 +595,6 @@ pub fn div_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("div_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -632,9 +607,6 @@ pub fn div_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn div_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("div_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -647,9 +619,6 @@ pub fn div_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mod_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -662,9 +631,6 @@ pub fn mod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mod_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -677,9 +643,6 @@ pub fn mod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mod_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -692,9 +655,6 @@ pub fn mod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn mod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("mod_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -707,9 +667,6 @@ pub fn mod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("uadd_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -720,9 +677,6 @@ pub fn uadd_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("uadd_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -733,9 +687,6 @@ pub fn uadd_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("uadd_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -746,9 +697,6 @@ pub fn uadd_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn uadd_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("uadd_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -759,9 +707,6 @@ pub fn uadd_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("usub_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -772,9 +717,6 @@ pub fn usub_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("usub_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -785,9 +727,6 @@ pub fn usub_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("usub_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -798,9 +737,6 @@ pub fn usub_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn usub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("usub_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -811,9 +747,6 @@ pub fn usub_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umul_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -824,9 +757,6 @@ pub fn umul_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umul_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -837,9 +767,6 @@ pub fn umul_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umul_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -850,9 +777,6 @@ pub fn umul_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umul_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -863,9 +787,6 @@ pub fn umul_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("udiv_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -876,9 +797,6 @@ pub fn udiv_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("udiv_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -889,9 +807,6 @@ pub fn udiv_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("udiv_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -902,9 +817,6 @@ pub fn udiv_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn udiv_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("udiv_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -915,9 +827,6 @@ pub fn udiv_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umod_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -928,9 +837,6 @@ pub fn umod_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umod_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -941,9 +847,6 @@ pub fn umod_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umod_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -954,9 +857,6 @@ pub fn umod_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn umod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("umod_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -967,9 +867,6 @@ pub fn umod_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shr_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shr_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -980,9 +877,6 @@ pub fn shr_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shr_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shr_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -993,9 +887,6 @@ pub fn shr_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shr_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shr_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1006,9 +897,6 @@ pub fn shr_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shr_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shr_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1019,9 +907,6 @@ pub fn shr_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shl_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shl_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1032,9 +917,6 @@ pub fn shl_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shl_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shl_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1045,9 +927,6 @@ pub fn shl_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shl_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shl_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1058,9 +937,6 @@ pub fn shl_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn shl_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("shl_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1071,9 +947,6 @@ pub fn shl_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("and_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1084,9 +957,6 @@ pub fn and_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("and_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1097,9 +967,6 @@ pub fn and_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("and_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1110,9 +977,6 @@ pub fn and_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn and_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("and_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1123,9 +987,6 @@ pub fn and_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("xor_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1136,9 +997,6 @@ pub fn xor_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("xor_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1149,9 +1007,6 @@ pub fn xor_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("xor_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1162,9 +1017,6 @@ pub fn xor_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn xor_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("xor_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1175,9 +1027,6 @@ pub fn xor_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("or_rrr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1188,9 +1037,6 @@ pub fn or_rrr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("or_rrl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1201,9 +1047,6 @@ pub fn or_rrl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("or_rlr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1214,9 +1057,6 @@ pub fn or_rlr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn or_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("or_rll\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x0000FF00) >> 0x8;
 	const left = (inst & 0x00FF0000) >> 0x10;
@@ -1227,9 +1067,6 @@ pub fn or_rll(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn not_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("not_rr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -1244,9 +1081,6 @@ pub fn not_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn not_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("not_rl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -1261,9 +1095,6 @@ pub fn not_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn com_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("com_rr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -1273,9 +1104,6 @@ pub fn com_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn com_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("com_rl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const dst = (inst & 0x00FF0000) >> 0x10;
 	const src = (inst & 0xFF000000) >> 0x18;
@@ -1285,9 +1113,6 @@ pub fn com_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn cmp_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("cmp_rr\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -1305,9 +1130,6 @@ pub fn cmp_rr(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn cmp_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("cmp_rl\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const left = (inst & 0x00FF0000) >> 0x10;
 	const right = (inst & 0xFF000000) >> 0x18;
@@ -1325,9 +1147,6 @@ pub fn cmp_rl(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jmp(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jmp\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	core.reg[rip] +%= @bitCast(off);
@@ -1335,9 +1154,6 @@ pub fn jmp(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jeq\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] == 0){
@@ -1349,9 +1165,6 @@ pub fn jeq(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jne\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] != 0){
@@ -1363,9 +1176,6 @@ pub fn jne(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jlt\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] == 1){
@@ -1377,9 +1187,6 @@ pub fn jlt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jle\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] < 2){
@@ -1391,9 +1198,6 @@ pub fn jle(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jgt\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] == 2){
@@ -1405,9 +1209,6 @@ pub fn jgt(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("jge\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	if (core.reg[rsr] > 1){
@@ -1419,9 +1220,6 @@ pub fn jge(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("call\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const off:i64 = @as(i16, @bitCast(@as(u16, @truncate((inst & 0xFFFF0000) >> 0x10))));
 	core.reg[rsp] -= 8;
@@ -1431,9 +1229,6 @@ pub fn call(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn ret_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("ret_r\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	core.reg[rsp] += 8;
@@ -1443,9 +1238,6 @@ pub fn ret_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn ret_l(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("ret_l\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const lit = (inst & 0xFF00) >> 0x8;
 	core.reg[rsp] += 8;
@@ -1455,9 +1247,6 @@ pub fn ret_l(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn psh_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("psh_r\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	core.reg[rsp] -= 8;
@@ -1467,9 +1256,6 @@ pub fn psh_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("pop_r\n", .{});
-	}
 	const inst = vm.memory.half_words[ip.*];
 	const reg = (inst & 0xFF00) >> 0x8;
 	core.reg[reg] = vm.memory.words[core.reg[rsp] >> 3];
@@ -1479,9 +1265,6 @@ pub fn pop_r(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 }
 
 pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
-	if (debug){
-		std.debug.print("int: {}\n", .{core.reg[0]});
-	}
 	if (core.reg[r0] == 0){
 		if (vm.context) |context| {
 			context.sleep_core();

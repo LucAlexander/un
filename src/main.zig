@@ -694,7 +694,7 @@ const Program = struct {
 			.screen_width = 1,
 			.screen_height = 1,
 			.cores = 4,
-			.mem_size = 0x100000,
+			.mem_size = 0x200000,
 			.mem = mem.*,
 		};
 		var irmap = Map(*ir.VM).init(mem.*);
