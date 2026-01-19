@@ -1839,10 +1839,7 @@ const Program = struct {
 			  ( source.list.items[1].atom.tag != .REG4 and
 			  source.list.items[1].atom.tag != .REG5 and
 			  source.list.items[1].atom.tag != .REG6 and
-			  source.list.items[1].atom.tag != .REG7 and
-			  source.list.items[1].atom.tag != .REG8 and
-			  source.list.items[1].atom.tag != .REG9 and
-			  source.list.items[1].atom.tag != .REG10)){
+			  source.list.items[1].atom.tag != .REG7)){
 				const loc = self.mem.create(Expr)
 					catch unreachable;
 				loc.* = Expr{
@@ -2313,7 +2310,7 @@ const Program = struct {
 			i += 1;
 		}
 		current_block.end = i;
-		self.backward_cfg(&block_list);
+		var last_used = self.backward_cfg(&block_list);
 		var loop = false;
 		var active_loops = std.AutoHashMap(*BBlock, bool).init(self.mem.*);
 		var allocation_boundry:u64 = 0;
@@ -2424,18 +2421,17 @@ const Program = struct {
 			}
 			var free_list = Buffer(TOKEN).init(self.mem.*);
 			var it = reg_of.iterator();
-			outer: while (it.next()) |entry| {
+			while (it.next()) |entry| {
 				const candidate = entry.key_ptr.*;
-				for (block.live_out.items) |exp| {
-					if (std.mem.eql(u8, exp.atom.text, candidate)){
-						continue :outer;
+				if (last_used.get(candidate)) |ind| {
+					if (ind == block.end){
+						if (debug){
+							std.debug.print("queing free {s} <-> {}\n", .{candidate, entry.value_ptr.*});
+						}
+						free_list.append(entry.value_ptr.*)
+							catch unreachable;
 					}
 				}
-				if (debug){
-					std.debug.print("freeing {s} <-> {}\n", .{candidate, entry.value_ptr.*});
-				}
-				free_list.append(entry.value_ptr.*)
-					catch unreachable;
 			}
 			for (free_list.items) |target| {
 				if (var_of.get(target)) |variable| {
@@ -2443,6 +2439,7 @@ const Program = struct {
 					_ = reg_of.remove(variable.atom.text);
 					free_regs.append(target)
 						catch unreachable;
+					std.debug.print("freeing {s} <-> {}\n", .{variable.atom.text, target});
 				}
 			}
 		}
@@ -2450,8 +2447,9 @@ const Program = struct {
 		return new;
 	}
 
-	pub fn backward_cfg(self: *Program, blocks: *Buffer(*BBlock)) void {
+	pub fn backward_cfg(self: *Program, blocks: *Buffer(*BBlock)) Map(u64) {
 		var worklist = std.ArrayList(*BBlock).init(self.mem.*);
+		var last_used = Map(u64).init(self.mem.*);
 		defer worklist.deinit();
 		for (blocks.items) |b| {
 			b.live_in.clearRetainingCapacity();
@@ -2465,6 +2463,18 @@ const Program = struct {
 				const old_out_len = b.live_out.items.len;
 				b.live_out.clearRetainingCapacity();
 				b.live_in.clearRetainingCapacity();
+				for (b.read_write.items) |v| {
+					if (last_used.get(v.atom.text) == null) {
+						last_used.put(v.atom.text, b.end)
+							catch unreachable;
+					}
+				}
+				for (b.write.items) |v| {
+					if (last_used.get(v.atom.text) == null) {
+						last_used.put(v.atom.text, b.end)
+							catch unreachable;
+					}
+				}
 				for (b.next.items) |next| {
 					outer: for (next.live_in.items) |in| {
 						for (b.live_out.items) |out| {
@@ -2526,6 +2536,7 @@ const Program = struct {
 				}
 			}
 		}
+		return last_used;
 	}
 
 	pub fn check_var_read(_: *Program, current_block: *BBlock, expr: *Expr) void {
@@ -2533,15 +2544,10 @@ const Program = struct {
 			std.debug.assert(expr.list.items[0].* == .atom);
 			std.debug.assert(expr.list.items[0].atom.tag == .AT);
 			switch(expr.list.items[1].atom.tag){
-				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 					return;
 				},
 				else => {}
-			}
-			for (current_block.write.items) |candidate| {
-				if (std.mem.eql(u8, candidate.atom.text, expr.list.items[1].atom.text)){
-					return;
-				}
 			}
 			for (current_block.read_write.items) |exists| {
 				if (std.mem.eql(u8, exists.atom.text, expr.list.items[1].atom.text)){
@@ -2553,15 +2559,10 @@ const Program = struct {
 			return;
 		}
 		switch(expr.atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 				return;
 			},
 			else => {}
-		}
-		for (current_block.write.items) |candidate| {
-			if (std.mem.eql(u8, candidate.atom.text, expr.atom.text)){
-				return;
-			}
 		}
 		for (current_block.read_write.items) |exists| {
 			if (std.mem.eql(u8, exists.atom.text, expr.atom.text)){
@@ -2578,7 +2579,7 @@ const Program = struct {
 			std.debug.assert(expr.list.items[0].* == .atom);
 			std.debug.assert(expr.list.items[0].atom.tag == .AT);
 			switch(expr.list.items[1].atom.tag){
-				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+				.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 					return;
 				},
 				else => {}
@@ -2593,7 +2594,7 @@ const Program = struct {
 			return;
 		}
 		switch(expr.atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 				return;
 			},
 			else => {}
@@ -2656,7 +2657,7 @@ const Program = struct {
 		switch (expr.*){
 			.atom => {
 				switch(expr.atom.tag){
-					.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+					.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 						return null;
 					},
 					else => {}
@@ -3297,7 +3298,7 @@ pub fn used_in_inst(inst: *Expr, candidate: []const u8) bool {
 pub fn targets_reg(expr: *Expr) ?*Expr {
 	if (expr.* == .list){
 		switch(expr.list.items[1].atom.tag){
-			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+			.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 				return null;
 			},
 			else => {}
@@ -3305,7 +3306,7 @@ pub fn targets_reg(expr: *Expr) ?*Expr {
 		return expr.list.items[1];
 	}
 	switch(expr.atom.tag){
-		.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG11, .FPTR, .SPTR => {
+		.NUM, .STR, .REG0, .REG1, .REG2, .REG3, .REG8, .REG9, .REG10, .REG11, .FPTR, .SPTR => {
 			return null;
 		},
 		else => {}
