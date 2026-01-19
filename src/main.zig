@@ -2397,7 +2397,7 @@ const Program = struct {
 						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
-					.PSH => {
+					.CALL, .RET, .JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .PSH => {
 						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.POP => {
@@ -2439,7 +2439,9 @@ const Program = struct {
 					_ = reg_of.remove(variable.atom.text);
 					free_regs.append(target)
 						catch unreachable;
-					std.debug.print("freeing {s} <-> {}\n", .{variable.atom.text, target});
+					if (debug){
+						std.debug.print("freeing {s} <-> {}\n", .{variable.atom.text, target});
+					}
 				}
 			}
 		}
