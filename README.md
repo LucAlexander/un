@@ -16,15 +16,15 @@ As you write a program in this language, you are acting as a purpose built compi
 
 # Special Forms
 
-`(bind name args body)`
+`(bind name args body)` binds a name to a compile time syntactic expansion.
 
-`(uid list_of_uid_aliases body)`
+`(comp vm_name (body))` computes a body expression block at compile time in the provided virtual machine. The first 100 bytes of the virtual machine + the program section are ephemeral per invocation, but the rest of the memory space is entirely persistent between invocations. This enables compile time reasoning about the program on a global level. Any register variables found in the body will be reified into the ephemeral static section of the provided VM and will be replaced inline with the address into the machines memory space where that value is stored. Values are localized slices comprising of a length followed by a buffer of data. The final expression of a block will be relfected back to the s expression substrate in the form of an s expression, converting a slice buffer into symbols, s expresions and values. These symbols and expressions can be stored in the VM and reflected back in a differing invocation. 
 
-`(flat list)`
+`(uid list_of_uid_aliases body)` defines a list of unique identifiers which will be abstracted away to unique tokens before lowering to a normalized IR. These aliases only apply in the provided body.
 
-`(comp vm_name (body))`
+`(flat list)` flattens an s expression. `(f (flat (a b c)))` -> `(f a b c)`
 
-`(use path)`
+`(use path)` searches for the file in `path` and compiles the binds found in that file, replacing the invocation with the expression body of that module. This allows for imports as well as external compile time execution. 
 
 This is not a Lisp. Invoking a user defined bind will inline that procedure not call it like a function.
 
@@ -87,7 +87,7 @@ create unique identifiers with (uid list block)
 ))
 ```
 
-You can ncest expressions as long as they have a terminal symbol
+You can nest expressions as long as they have a terminal symbol
 
 ```
 (mov x (
