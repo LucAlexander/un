@@ -52,8 +52,7 @@
 		(mov syscall 1)
 		(int syscall)
 		(mov syscall 3)
-		(int syscall)
-		))))
+		(int syscall)))))
 
 (bind comment (text)
 	(bind COMMENT_BODY_EXPANSION () ()))
