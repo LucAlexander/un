@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = false;
+var debug = true;
 
 const Error = struct {
 	message: []u8,
@@ -814,9 +814,15 @@ const Program = struct {
 		if (expr.* == .list){
 			if (expr.list.items.len == 1){
 				if (expr.list.items[0].* == .list){
-					return self.normalize(normalized, expr.list.items[0], full);
+					const nested = self.normalize(normalized, expr.list.items[0], full);
+					if (nested != null){
+						return nested;
+					}
 				}
 			}
+		}
+		if (expr.list.items.len == 0){
+			return expr;
 		}
 		var limit = expr.list.items.len-1;
 		if (full){
@@ -836,6 +842,7 @@ const Program = struct {
 				const flattened = self.normalize(normalized, inst, true);
 				if (flattened == null){
 					std.debug.print("could not flatten nested block\n", .{});
+					show_expr(inst, 1);
 					return null;
 				}
 				continue;
@@ -890,6 +897,7 @@ const Program = struct {
 				.MOV => {
 					if (inst.list.items.len != 3){
 						std.debug.print("Expected 2 arguments for mov\n", .{});
+						show_expr(inst, 1);
 						return null;
 					}
 					if (self.expect_register(normalized, &inst.list.items[1])){
@@ -909,6 +917,7 @@ const Program = struct {
 							continue;
 						}
 						std.debug.print("mov unable to match second argument\n", .{});
+						show_expr(inst, 1);
 						return null;
 					}
 					if (self.expect_dregister(normalized, inst.list.items[1])){
@@ -928,9 +937,11 @@ const Program = struct {
 							continue;
 						}
 						std.debug.print("mov unable to match second argument\n", .{});
+						show_expr(inst, 1);
 						return null;
 					}
 					std.debug.print("mov unable to match first argument\n", .{});
+					show_expr(inst, 1);
 					return null;
 				},
 				.ADD, .SUB, .MUL, .DIV, .MOD, .UADD, .USUB, .UMUL, .UDIV, .UMOD, .SHR, .SHL, .AND, .OR, .XOR => {
