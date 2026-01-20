@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = true;
+var debug = false;
 
 const Error = struct {
 	message: []u8,
@@ -1018,8 +1018,10 @@ const Program = struct {
 		if (expr.list.items[expr.list.items.len-1].* == .atom){
 			return expr.list.items[expr.list.items.len-1];
 		}
-		if (expr.list.items[expr.list.items.len-1].list.items[0].* == .list){
-			return self.normalize(normalized, expr.list.items[expr.list.items.len-1].list.items[0], false);
+		if (!full){
+			if (expr.list.items[expr.list.items.len-1].list.items[0].* == .list){
+				return self.normalize(normalized, expr.list.items[expr.list.items.len-1].list.items[0], false);
+			}
 		}
 		return expr.list.items[expr.list.items.len-1].list.items[0];
 	}
@@ -1544,6 +1546,9 @@ const Program = struct {
 							const current: i16 = @bitCast(@as(u16, @truncate(i)));
 							const buf = self.mem.alloc(u8, 20)
 								catch unreachable;
+							if (debug){
+								std.debug.print("inscribed jump up to {s} as: {x} - {x} = {x}\n", .{key, offset, current, @as(u16, @bitCast(offset -% current))});
+							}
 							const slice = std.fmt.bufPrint(buf, "{x}", .{@as(u16, @bitCast(offset -% current))})
 								catch unreachable;
 							const loc = self.mem.create(Expr)
@@ -1594,6 +1599,9 @@ const Program = struct {
 									catch unreachable;
 								const offset:i16 = @bitCast(@as(u16, @truncate(entry.*.atom.pos)));
 								const current: i16 = @bitCast(@as(u16, @truncate(i)));
+								if (debug){
+									std.debug.print("inscribed jump down as: {x} - {x} = {x}\n", .{current, offset, current -% offset});
+								}
 								const replaceslice = std.fmt.bufPrint(replacebuf, "{x}", .{@as(u16, @bitCast(current-%offset))})
 									catch unreachable;
 								entry.* = self.mem.create(Expr)
@@ -2335,7 +2343,10 @@ const Program = struct {
 				active_loops.put(prev, true)
 					catch unreachable;
 			}
-			for (block.start .. block.end) |index| {
+			for (block.start .. block.end+1) |index| {
+				if (index >= normalized.items.len){
+					break;
+				}
 				const inst = normalized.items[index];
 				var wrote_10: ?WriteRecord= null;
 				aux_regs.clearRetainingCapacity();
@@ -2397,7 +2408,7 @@ const Program = struct {
 						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 						_ = self.color_arg(copy.list.items[2], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
-					.CALL, .RET, .JMP, .JEQ, .JNE, .JGT, .JGE, .JLT, .JLE, .PSH => {
+					.RET, .PSH => {
 						_ = self.color_arg(copy.list.items[1], &reg_of, &var_of, &stack_offsets, &new, false, &aux_regs);
 					},
 					.POP => {
