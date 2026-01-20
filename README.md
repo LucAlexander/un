@@ -12,20 +12,19 @@ The expected use case for this tool is experimentation with novel language featu
 
 The basic premise is that the language provides an intermediate representation, and a series of simple meta primitives to compose the instructions in this representation to infinitely extend the surface area of the language. There is full reification and reflection between the high level s expression environment used for meta computation, and the runtime bytecode environment.
 
+As you write a program in this language, you are acting as a purpose built compiler. This is compilation as computation. If you imagine a compiler as a set of all admissible programs, then the more constraint you add the smaller that set becomes, until theoretically you have a compiler which admits only the one correct program for the task at hand, a program which is built to describe not how a program performs its task, but the constraints which bind what the program must achieve. This can include but is not limited to: what task metric must be completed, how much memory the program uses, the type safety of the program, the borrow safety of the program, whether the program is representable by a finite state automaton, whether the program has ceratin provable invariants, whether the program is permission safe. This is logic programming, but constraint based. 
 
 # Special Forms
 
-```
-(bind name args body)
+`(bind name args body)`
 
-(uid list_of_uid_aliases body)
+`(uid list_of_uid_aliases body)`
 
-(flat list)
+`(flat list)`
 
-(comp vm_name (body))
+`(comp vm_name (body))`
 
-(use path)
-```
+`(use path)`
 
 This is not a Lisp. Invoking a user defined bind will inline that procedure not call it like a function.
 
@@ -96,6 +95,114 @@ You can ncest expressions as long as they have a terminal symbol
     (mov y 7)
     (y)
 ))
+```
+
+
+
+# Examples
+
+## Primitive Constraint System
+
+`examples/std.un` provides a simple standard library with control flow, an arena allocator, and a basic growable buffer.
+
+```
+(use "std.un")
+
+(bind main ()
+	((uid (i address x y pool subpool) (
+		(reg pool)
+		(reg subpool)
+		(reg address)
+		(reif address 00010000)
+		(mov pool (arena address 4000))
+		(mov subpool (subarena pool 1000))
+		(reg x)
+		(reg y)
+		(if (subpool) (
+			(mov x (alloc subpool 8))
+			(if (x) (
+				(print "alloc")
+			)(
+				(print "fail")
+			))
+		)(
+			(print "subfail")
+		))
+		(mov x (buffer subpool F0))
+		(for i 0 10 (
+			(mov y (append subpool x i))
+			(print "appended")
+		))
+		(mov x 0)
+		(int x)))))
+
+(main)
+```
+
+`examples/constraint.un` provides primitives for a hardprogrammed compile time user constraint system.
+
+```
+(use "constraint.un")
+
+(sink database_write)
+(source database_read)
+
+(constrain vacuous_false key val
+	((err "type error")))
+
+(constrain vacuous_true key val
+	((nop)))
+
+(term update_user data
+	((uid (x) (
+		(reg x)
+		(mov x (database_read data))
+		(database_write data)))))
+
+(term main arg
+	((uid (x) (
+		(reg x)
+		(mov x (constraint_setup))
+		(mov x (constraint vacuous_true))
+		(update_user ("john" "pass123"))
+		(mov x 0)
+		(int x)))))
+
+(main 0)
+```
+
+## Forthlike
+
+`examples/forth.un` provides some basic primitives for a forthlike language + a bind for word definitions.
+```
+(use "forth.un")
+
+(word double (
+	(dup)
+	(psh 2)
+	(*)
+))
+
+(word sqr (
+	(dup)
+	(*)
+))
+
+(bind main () (
+	(uid (x) (
+		(reg x)
+		(mov x 1)
+		(psh x)
+		(dup)
+		(ovr)
+		(+)
+		(mov x 0)
+		(int x)
+	))
+))
+
+(main)
+
 ```
 
 
