@@ -3072,13 +3072,16 @@ const Program = struct {
 			};
 			return loc;
 		}
-		const return_address = vm.?.cores[0].reg[11];
+		const return_address = vm.?.cores[0].reg[1];
 		return self.lift_reif(vm.?, repr.reif, return_address);
 	}
 
 	pub fn lift_reif(self: *Program, vm: *ir.VM, reif: Reif, addr: u64) *Expr {
 		const start = addr >> 3;
 		const n = vm.memory.words[start];
+		if (debug){
+			std.debug.print("{x} : {x} |\n", .{addr, n});
+		}
 		var output = self.mem.create(Expr)
 			catch unreachable;
 		output.* = Expr{
@@ -3087,6 +3090,9 @@ const Program = struct {
 		for (0..n) |i| {
 			const elem = vm.memory.words[start+i+1];
 			const tag = elem & 0xffffffff00000000;
+			if (debug){
+				std.debug.print(": {x}\n", .{elem});
+			}
 			switch (@as(ReifTag, @enumFromInt(tag))) {
 				.reif_val => {
 					const buf = self.mem.alloc(u8, 20)
