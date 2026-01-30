@@ -54,7 +54,7 @@ Unary ops: not com
     (cmp x 5)
     (jge exit)
     (add x x 1)
-    (jmp label)
+    (jmp loop)
 (label exit)
 ```
 
