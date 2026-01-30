@@ -103,10 +103,18 @@ You can nest expressions as long as they have a terminal symbol
 
 ## Primitive Constraint System
 
-`examples/std.un` provides a simple standard library with control flow, an arena allocator, and a basic growable buffer.
+`examples/std.un` provides a micro standard library with control flow, an arena allocator, a basic growable buffer, and a compile time constraint manager.
 
 ```
 (use "std.un")
+
+(constraint vacuous_false key val (
+	(err "compile time error")
+))
+
+(constraint vacuous_true key val (
+	(nop)
+))
 
 (bind main ()
 	((uid (i address x y pool subpool) (
@@ -133,42 +141,14 @@ You can nest expressions as long as they have a terminal symbol
 			(mov y (append subpool x i))
 			(print "appended")
 		))
+		(constraint_setup)
+		(constrain vacuous_true)
+		(info "a" "b")
 		(mov x 0)
 		(int x)))))
 
 (main)
-```
 
-`examples/constraint.un` provides primitives for a hardprogrammed compile time user constraint system.
-
-```
-(use "constraint.un")
-
-(sink database_write)
-(source database_read)
-
-(constrain vacuous_false key val
-	((err "type error")))
-
-(constrain vacuous_true key val
-	((nop)))
-
-(term update_user data
-	((uid (x) (
-		(reg x)
-		(mov x (database_read data))
-		(database_write data)))))
-
-(term main arg
-	((uid (x) (
-		(reg x)
-		(mov x (constraint_setup))
-		(mov x (constraint vacuous_true))
-		(update_user ("john" "pass123"))
-		(mov x 0)
-		(int x)))))
-
-(main 0)
 ```
 
 ## Forthlike
