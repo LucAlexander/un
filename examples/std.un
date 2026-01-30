@@ -170,8 +170,6 @@
 		(reg z)
 		(reg len)
 		(mov x address)
-		(mov r0 5)
-		(int r0 x)
 		(mov y (at x))
 		(add x x 8)
 		(mov z (at x))
@@ -180,7 +178,7 @@
 		(cmp w z)
 		(jge exit)
 		(mov z address)
-		(mov x y)
+		(add x z y)
 		(mov (at z) w)
 		(jmp return)
 		(label exit)
@@ -313,7 +311,7 @@
 			(int x))))))
 
 (bind constraint_buffer_offset (address)
-	((add address address 110)))
+	((add address address 10)))
 
 (bind constrain (name)
 	(comp constraint
