@@ -2,7 +2,7 @@ const std = @import("std");
 const Buffer = std.ArrayList;
 
 const debug = false;
-const debugger = false;
+const debugger = true;
 
 pub const Config = struct {
 	screen_width: u64,
@@ -1289,6 +1289,7 @@ pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 		if (vm.context)|context|{
 			_ = context.awaken_core(core.reg[r1] >> 2) catch {};
 		}
+		ip.* += 1;
 		return true;
 	}
 	if (core.reg[r0] == 3){
@@ -1300,6 +1301,24 @@ pub fn int(vm: *VM, core: *Core, ip: *align(1) u64) bool {
 			std.debug.print("terminating {}\n", .{active_core});
 		}
 		std.debug.assert(false);
+	}
+	if (core.reg[r0] == 4){
+		std.debug.print("{x}\n", .{core.reg[r1]});
+		ip.* += 1;
+		return true;
+	}
+	if (core.reg[r0] == 5){
+		const address = core.reg[r1];
+		var i = address;
+		while (i < address + 8*10){
+			for (0..8) |_| {
+				std.debug.print("{x:02} ", .{vm.memory.mem[i]});
+				i += 1;
+			}
+			std.debug.print("\n", .{});
+		}
+		ip.* += 1;
+		return true;
 	}
 	if (vm.context) |context| {
 		context.sleep_core();
