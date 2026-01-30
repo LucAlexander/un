@@ -5,7 +5,7 @@ const Map = std.StringHashMap;
 
 var internal_uid: []const u8 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
-var debug = true;
+var debug = false;
 
 const Error = struct {
 	message: []u8,

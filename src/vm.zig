@@ -2,7 +2,7 @@ const std = @import("std");
 const Buffer = std.ArrayList;
 
 const debug = false;
-const debugger = true;
+const debugger = false;
 
 pub const Config = struct {
 	screen_width: u64,
